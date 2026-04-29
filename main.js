@@ -25,6 +25,13 @@ L.tileLayer('/tiles/{z}/{x}/{y}.jpg', {
     attribution: 'Map data &copy; 国土地理院'
 }).addTo(map);
 
+// 【追加】画面サイズの誤認を防ぐ自動調整プログラム
+const resizeObserver = new ResizeObserver(() => {
+    map.invalidateSize(); // 地図に「枠の大きさが変わったから再計算して！」と命令する
+});
+resizeObserver.observe(document.getElementById('map'));
+//
+
 let currentPolyline = null; 
 let currentMarkers = [];    
 let currentHeatLayer = null; 
