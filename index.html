@@ -14,43 +14,43 @@
         <button id="close-wizard" class="close-btn">✖ やめる</button>
         
         <div id="step-1" class="wizard-step active">
-          <h3>👤 なまえ（ニックネーム）を おしえてね</h3>
+          <h3>なまえ（ニックネーム）を おしえてね</h3>
           <input type="text" id="input-nickname" class="large-input" placeholder="ニックネームを入力">
-          <div class="btn-area"><button class="next-btn" data-next="2">つぎへ ➡</button></div>
+          <div class="btn-area"><button class="next-btn" data-next="2">つぎへ</button></div>
         </div>
 
         <div id="step-2" class="wizard-step hidden">
-          <h3>🐸 どのいきものを みつけた？</h3>
+          <h3>どのいきものを みつけた？</h3>
           <div class="creature-grid">
             <button class="creature-btn" data-name="アカハライモリ">アカハライモリ</button>
             <button class="creature-btn" data-name="サワガニ">サワガニ</button>
             <button class="creature-btn" data-name="ハグロトンボ">ハグロトンボ</button>
             <button class="creature-btn" data-name="コオニヤンマ">コオニヤンマ</button>
           </div>
-          <div class="btn-area"><button class="prev-btn" data-prev="1">⬅ もどる</button></div>
+          <div class="btn-area"><button class="prev-btn" data-prev="1">もどる</button></div>
         </div>
 
         <div id="step-3" class="wizard-step hidden">
-          <h3>🎨 かいた え や、しゃしん を えらんでね</h3>
+          <h3>かいた え や、しゃしん を えらんでね</h3>
           <input type="file" id="input-image" accept="image/*" class="large-input">
           <img id="preview-image" style="max-width: 100%; max-height: 200px; display: none; margin-top: 10px; border-radius: 8px;">
           <div class="btn-area">
-            <button class="prev-btn" data-prev="2">⬅ もどる</button>
-            <button class="next-btn" data-next="4">つぎへ ➡</button>
+            <button class="prev-btn" data-prev="2">もどる</button>
+            <button class="next-btn" data-next="4">つぎへ</button>
           </div>
         </div>
 
         <div id="step-4" class="wizard-step hidden">
-          <h3>✏️ コメントを かいてね（きづいたことなど）</h3>
+          <h3>コメントを かいてね（きづいたことなど）</h3>
           <textarea id="input-comment" class="large-input" rows="4" placeholder="どんなところにいた？ なにをしていた？"></textarea>
           <div class="btn-area">
-            <button class="prev-btn" data-prev="3">⬅ もどる</button>
-            <button class="next-btn" data-next="5">かくにん ➡</button>
+            <button class="prev-btn" data-prev="3">もどる</button>
+            <button class="next-btn" data-next="5">かくにん</button>
           </div>
         </div>
 
         <div id="step-5" class="wizard-step hidden">
-          <h3>✅ これで とうろく する？</h3>
+          <h3>これで とうろく する？</h3>
           <div class="confirm-box">
             <p><b>なまえ:</b> <span id="confirm-nickname"></span></p>
             <p><b>いきもの:</b> <span id="confirm-creature"></span></p>
@@ -58,8 +58,8 @@
             <img id="confirm-image" style="max-width: 100%; max-height: 150px; border-radius: 8px;">
           </div>
           <div class="btn-area">
-            <button class="prev-btn" data-prev="4">⬅ もどる</button>
-            <button id="submit-btn" class="submit-btn">とうろく！ ✨</button>
+            <button class="prev-btn" data-prev="4">もどる</button>
+            <button id="submit-btn" class="submit-btn">とうろく</button>
           </div>
         </div>
       </div>
@@ -73,10 +73,10 @@
 
     <nav id="sidebar" class="sidebar hidden">
       <ul>
-        <li><button class="nav-btn group-btn" data-group="group1">🏕️ 1班の記録</button></li>
-        <li><button class="nav-btn group-btn" data-group="group2">🏕️ 2班の記録</button></li>
-        <li><button id="btn-heatmap" class="nav-btn">🔥 ヒートマップモード</button></li>
-        <li><button id="btn-reload" class="nav-btn">🔄 最新状態にする</button></li>
+        <li><button class="nav-btn group-btn" data-group="group1">1班の記録</button></li>
+        <li><button class="nav-btn group-btn" data-group="group2">2班の記録</button></li>
+        <li><button id="btn-heatmap" class="nav-btn">ヒートマップモード</button></li>
+        <li><button id="btn-reload" class="nav-btn">最新状態にする</button></li>
       </ul>
     </nav>
 
@@ -98,7 +98,7 @@
 
     <!-- ヒートマップモード用の集計パネル -->
     <div id="summary-panel" class="summary-panel hidden">
-      <h3>📊 発見レポート</h3>
+      <h3> 生物数</h3>
       <!-- 【追加】絞り込み用のドロップダウン -->
       <select id="heatmap-filter" class="heatmap-filter"></select>
       <ul id="summary-list"></ul>

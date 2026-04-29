@@ -45,7 +45,7 @@ window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
             </div>
             
             <button onclick="window.openWizard('${det.id}')" style="margin-bottom:20px; padding:12px 15px; background:#4CAF50; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; width:100%; font-size: 1.1em;">
-                ＋ ついかする！
+                ＋ ついかする
             </button>
     `;
 
