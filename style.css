@@ -1,0 +1,100 @@
+/* 全体のリセット */
+body, html {
+  margin: 0; padding: 0; width: 100%; height: 100%;
+  font-family: sans-serif; overflow: hidden;
+}
+
+#app {
+  display: flex; flex-direction: column; height: 100vh; position: relative;
+}
+
+/* ヘッダー */
+.header {
+  background-color: #4CAF50; color: white; display: flex;
+  align-items: center; padding: 10px; z-index: 2000;
+}
+.menu-btn {
+  background: none; border: none; color: white; font-size: 1.5em; cursor: pointer; margin-right: 15px;
+}
+.title { font-size: 1.2em; margin: 0; }
+
+/* メニュー（サイドバー） */
+.sidebar {
+  position: absolute; top: 50px; left: 0; width: 250px; height: calc(100vh - 50px);
+  background-color: rgba(255, 255, 255, 0.95); box-shadow: 2px 0 5px rgba(0,0,0,0.3);
+  z-index: 2500; transition: transform 0.3s ease; padding: 20px 0;
+}
+.sidebar.hidden { transform: translateX(-100%); }
+.sidebar ul { list-style: none; padding: 0; margin: 0; }
+.nav-btn {
+  width: 100%; padding: 15px 20px; text-align: left; background: none;
+  border: none; border-bottom: 1px solid #eee; font-size: 1.1em; cursor: pointer;
+}
+.nav-btn:hover { background-color: #f0f0f0; }
+
+/* メインコンテナとサイドパネル */
+#main-container {
+  display: flex; flex: 1; position: relative; overflow: hidden;
+}
+#map {
+  flex: 1; height: 100%; transition: all 0.3s ease; z-index: 1;
+}
+
+.detail-panel {
+  width: 33.33%; min-width: 300px;
+  background-color: white; border-left: 2px solid #ddd;
+  display: flex; flex-direction: column; z-index: 1500;
+  transition: transform 0.3s ease;
+}
+.detail-panel.hidden { display: none; }
+.panel-header {
+  padding: 15px; background-color: #f8f9fa; border-bottom: 1px solid #eee;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.panel-header h2 { margin: 0; font-size: 1.2em; color: #333; }
+.close-btn-panel { background: none; border: none; font-size: 1em; color: #666; cursor: pointer; font-weight: bold; }
+.panel-content { flex: 1; padding: 20px; overflow-y: auto; }
+.placeholder-text { color: #999; text-align: center; margin-top: 50px; }
+
+/* ヒートマップ集計パネル */
+/* ヒートマップ集計パネル */
+.summary-panel {
+  position: absolute; top: 60px; right: 20px; background-color: rgba(255, 255, 255, 0.95);
+  padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1000; min-width: 180px;
+}
+.summary-panel.hidden { display: none; }
+.summary-panel h3 { margin: 0 0 10px 0; font-size: 1.1em; border-bottom: 2px solid #FF9800; padding-bottom: 5px; }
+
+/* 【追加】ヒートマップの絞り込みドロップダウン */
+.heatmap-filter {
+  width: 100%; padding: 8px; margin-bottom: 10px; font-size: 1em;
+  border: 1px solid #ccc; border-radius: 4px; background-color: #fff; cursor: pointer;
+}
+
+.summary-panel ul { list-style: none; padding: 0; margin: 0; }
+.summary-panel li { margin-bottom: 8px; font-size: 1.1em; font-weight: bold; color: #333; }
+
+/* 投稿ウィザード用デザイン */
+.modal {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background-color: rgba(0,0,0,0.6); z-index: 3000; display: flex; justify-content: center; align-items: center;
+}
+.modal.hidden { display: none; }
+.modal-content {
+  background: white; width: 90%; max-width: 500px; border-radius: 12px; padding: 20px; position: relative;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+.close-btn { position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 1.2em; color: #666; cursor: pointer; }
+.wizard-step { display: none; text-align: center; }
+.wizard-step.active { display: block; animation: fadeIn 0.3s; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.large-input { width: 90%; padding: 15px; font-size: 1.1em; border: 2px solid #ddd; border-radius: 8px; margin-bottom: 15px; }
+.btn-area { display: flex; justify-content: space-around; margin-top: 20px; }
+.next-btn, .prev-btn, .submit-btn { padding: 12px 25px; font-size: 1.1em; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
+.next-btn { background-color: #2196F3; color: white; }
+.prev-btn { background-color: #e0e0e0; color: #333; }
+.submit-btn { background-color: #FF9800; color: white; font-size: 1.3em; padding: 15px 30px; }
+.creature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.creature-btn { padding: 20px 10px; font-size: 1.1em; font-weight: bold; border: 2px solid #4CAF50; background-color: white; color: #4CAF50; border-radius: 8px; cursor: pointer; }
+.creature-btn.selected { background-color: #4CAF50; color: white; }
+.confirm-box { background: #f9f9f9; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; }
