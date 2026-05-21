@@ -5,14 +5,13 @@ import 'leaflet/dist/leaflet.css';
 window.L = L; 
 import 'leaflet.heat';
 import './wizard.js'; 
-import { dummyData } from './data.js'; 
 
 import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
 import iconUrl from 'leaflet/dist/images/marker-icon.png';
 import shadowUrl from 'leaflet/dist/images/marker-shadow.png';
 L.Icon.Default.mergeOptions({ iconRetinaUrl, iconUrl, shadowUrl });
 
-// --- 【変更】ベクター画像を表示する範囲（ご指定の座標） ---
+// --- ベクター画像を表示する範囲（ご指定の座標） ---
 const imageBounds = [
     [35.0668688174732, 135.78416397658356], // 左上 (北西)
     [35.06464445892178, 135.78518787088882]  // 右下 (南東)
@@ -21,22 +20,23 @@ const imageBounds = [
 // --- 地図の初期化 ---
 const map = L.map('map', { 
     minZoom: 17, 
-    maxZoom: 22, // ベクター画像なので、かなり拡大しても綺麗に表示されます
-    maxBounds: imageBounds, // イラストの範囲外に行き過ぎないように制限
+    maxZoom: 22, 
+    maxBounds: imageBounds, 
     maxBoundsViscosity: 1.0
-}).fitBounds(imageBounds); // イラスト全体が収まるように表示
+}).fitBounds(imageBounds); 
 
-// --- 【変更】タイル地図を廃止し、ベクターイラストをオーバーレイとして表示 ---
 L.imageOverlay('/river_map4.svg', imageBounds, {
     interactive: true,
     opacity: 1.0
 }).addTo(map);
 
-// 画面サイズの誤認を防ぐ自動調整
 const resizeObserver = new ResizeObserver(() => {
     map.invalidateSize();
 });
 resizeObserver.observe(document.getElementById('map'));
+
+// --- バックエンドから取得したデータを保存する変数 ---
+let surveyData = {};
 
 let currentPolyline = null; 
 let currentMarkers = [];    
@@ -45,15 +45,20 @@ let currentGroupId = null;
 
 // --- サイドパネルに表示するHTMLを作る関数 ---
 window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
-    const det = dummyData[groupId].detections.find(d => d.id === detId);
+    const det = surveyData[groupId].detections.find(d => d.id === detId);
     
+    // 【変更】データベースから取得したサムネイル画像のパス（URL）を組み込む
+    const thumbUrl = det.thumbnail_url ? `http://localhost:8000/${det.thumbnail_url}` : '';
+
     let html = `
         <div>
             <b style="font-size: 1.4em; color: #333;">${det.class_name}</b><br>
             <span style="font-size: 0.9em; color: #666;">検出: ${det.timestamp}秒</span><br>
             
             <div style="display:flex; gap:10px; margin-top:15px; margin-bottom:15px;">
-                <div style="flex:1; background:#eee; height:100px; text-align:center; font-size:0.8em; line-height:100px; color:#555; border-radius:8px;">地上画像</div>
+                <div style="flex:1; background:#eee; height:100px; text-align:center; border-radius:8px; overflow:hidden;">
+                    ${thumbUrl ? `<img src="${thumbUrl}" style="width:100%; height:100%; object-fit:cover;" alt="AI画像">` : '<span style="line-height:100px; color:#555; font-size:0.8em;">地上画像なし</span>'}
+                </div>
                 <div style="flex:1; background:#ddd; height:100px; text-align:center; font-size:0.8em; line-height:100px; color:#555; border-radius:8px;">水中画像</div>
             </div>
             
@@ -64,6 +69,12 @@ window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
 
     if (det.user_posts && det.user_posts.length > 0) {
         const post = det.user_posts[postIndex];
+        
+        // 🌟【新規】画像URLがあれば<img>タグを作り、無ければ空にする
+        const userImgHtml = post.image_url 
+            ? `<div style="margin-top:10px;"><img src="http://localhost:8000/${post.image_url}" style="width:100%; border-radius:8px; object-fit:cover;"></div>` 
+            : '';
+
         html += `
             <div style="background:#fff9c4; padding:15px; border-radius:8px; border:1px solid #fbc02d;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -75,7 +86,7 @@ window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
                     <b>なまえ:</b> ${post.nickname}<br>
                     <b>いきもの:</b> ${post.creature}<br>
                     <b>コメント:</b> ${post.comment}
-                </div>
+                    ${userImgHtml} </div>
             </div>
         `;
     } else {
@@ -86,29 +97,25 @@ window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
     return html;
 };
 
-// --- パネルを開く関数 ---
 window.openDetailPanel = function(groupId, detId, postIndex = 0) {
     const panel = document.getElementById('detail-panel');
     const content = document.getElementById('panel-content');
     content.innerHTML = window.renderPanelHTML(groupId, detId, postIndex);
     panel.classList.remove('hidden');
     
-    const det = dummyData[groupId].detections.find(d => d.id === detId);
+    const det = surveyData[groupId].detections.find(d => d.id === detId);
     map.panTo([det.lat, det.lng]);
 };
 
-// --- カルーセルの表示更新関数 ---
 window.changePost = function(event, groupId, detId, newIndex) {
     if (event) event.stopPropagation();
     window.openDetailPanel(groupId, detId, newIndex);
 };
 
-// パネルの閉じるボタン
 document.getElementById('close-panel').addEventListener('click', () => {
     document.getElementById('detail-panel').classList.add('hidden');
 });
 
-// --- 地図上のデータをすべて消す関数 ---
 function clearMap() {
     if (currentPolyline) map.removeLayer(currentPolyline);
     if (currentHeatLayer) map.removeLayer(currentHeatLayer);
@@ -118,31 +125,35 @@ function clearMap() {
     document.getElementById('detail-panel').classList.add('hidden'); 
 }
 
-// --- 班のデータを地図に描画する関数 ---
 function renderGroupData(groupId) {
     currentGroupId = groupId;
-    const data = dummyData[groupId];
+    const data = surveyData[groupId];
     if (!data) return;
 
     clearMap();
 
-    currentPolyline = L.polyline(data.gps_track, { color: 'blue', weight: 4 }).addTo(map);
+    // 軌跡の描画
+    if (data.gps_track && data.gps_track.length > 0) {
+        currentPolyline = L.polyline(data.gps_track, { color: 'blue', weight: 4 }).addTo(map);
+    }
 
-    data.detections.forEach(det => {
-        const marker = L.marker([det.lat, det.lng], { detId: det.id }).addTo(map);
-        marker.on('click', () => { window.openDetailPanel(groupId, det.id, 0); });
-        currentMarkers.push(marker);
-    });
+    // ピンの描画
+    if (data.detections) {
+        data.detections.forEach(det => {
+            const marker = L.marker([det.lat, det.lng], { detId: det.id }).addTo(map);
+            marker.on('click', () => { window.openDetailPanel(groupId, det.id, 0); });
+            currentMarkers.push(marker);
+        });
+    }
 
-    // イラストの範囲に収まっているか自動調整
     map.fitBounds(imageBounds);
 }
 
-// --- ヒートマップ（熱源）を描画する関数 ---
 function drawHeatLayer(targetCreature) {
     if (currentHeatLayer) map.removeLayer(currentHeatLayer);
     let heatPoints = [];
-    Object.values(dummyData).forEach(group => {
+    Object.values(surveyData).forEach(group => {
+        if (!group.detections) return;
         group.detections.forEach(det => {
             if (targetCreature === 'all' || det.class_name === targetCreature) {
                 heatPoints.push([det.lat, det.lng, 1]); 
@@ -152,14 +163,14 @@ function drawHeatLayer(targetCreature) {
     currentHeatLayer = L.heatLayer(heatPoints, { radius: 25, blur: 15, maxZoom: 18 }).addTo(map);
 }
 
-// --- ヒートマップモードの準備 ---
 function renderHeatmap() {
     clearMap(); 
     currentGroupId = "heatmap";
     document.querySelector('.title').innerText = `川の調査記録 - ヒートマップモード`;
 
     let creatureCounts = {}; 
-    Object.values(dummyData).forEach(group => {
+    Object.values(surveyData).forEach(group => {
+        if (!group.detections) return;
         group.detections.forEach(det => {
             if (creatureCounts[det.class_name]) {
                 creatureCounts[det.class_name]++;
@@ -189,30 +200,82 @@ function renderHeatmap() {
     drawHeatLayer('all');
 }
 
-// --- UIの動作 ---
+// --- 【新規】サイドバーのメニューをデータに合わせて自動作成する関数 ---
+function updateSidebarMenu() {
+    const sidebarList = document.querySelector('#sidebar ul');
+    sidebarList.innerHTML = ''; // メニューを一旦空にする
+
+    // 1. データベースから取得した動画の数だけボタンを作る
+    Object.entries(surveyData).forEach(([groupId, group]) => {
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.className = 'nav-btn group-btn';
+        btn.dataset.group = groupId;
+        // CSVの original_video_filename（例: GX010033.MP4）をボタン名にする
+        btn.innerText = `🎥 ${group.name} の記録`; 
+        
+        btn.addEventListener('click', () => {
+            renderGroupData(groupId);
+            document.querySelector('.title').innerText = `川の調査記録 - ${group.name}`;
+            document.getElementById('sidebar').classList.add('hidden');
+        });
+        
+        li.appendChild(btn);
+        sidebarList.appendChild(li);
+    });
+
+    // 2. ヒートマップボタンを追加
+    const liHeat = document.createElement('li');
+    const btnHeat = document.createElement('button');
+    btnHeat.id = 'btn-heatmap';
+    btnHeat.className = 'nav-btn';
+    btnHeat.innerText = 'ヒートマップモード';
+    btnHeat.addEventListener('click', () => {
+        renderHeatmap();
+        document.getElementById('sidebar').classList.add('hidden');
+    });
+    liHeat.appendChild(btnHeat);
+    sidebarList.appendChild(liHeat);
+
+    // 3. リロードボタンを追加
+    const liReload = document.createElement('li');
+    const btnReload = document.createElement('button');
+    btnReload.id = 'btn-reload';
+    btnReload.className = 'nav-btn';
+    btnReload.innerText = '最新状態にする';
+    btnReload.addEventListener('click', async () => {
+        document.getElementById('sidebar').classList.add('hidden');
+        await loadSurveyData();
+        alert("最新のデータをサーバーから再取得しました！");
+        if (currentGroupId === "heatmap") {
+            renderHeatmap();
+        } else if (currentGroupId) {
+            renderGroupData(currentGroupId);
+        }
+    });
+    liReload.appendChild(btnReload);
+    sidebarList.appendChild(liReload);
+}
+
+async function loadSurveyData() {
+    try {
+        const response = await fetch('http://localhost:8000/api/surveys');
+        surveyData = await response.json();
+        console.log("サーバーからデータを取得しました:", surveyData);
+        
+        // データ取得後にメニューを構築
+        updateSidebarMenu();
+    } catch (error) {
+        console.error("サーバーとの通信に失敗しました:", error);
+    }
+}
+
+async function initApp() {
+    await loadSurveyData(); 
+}
+initApp();
+
+// ハンバーガーメニューの開閉
 const menuBtn = document.getElementById('menu-btn');
 const sidebar = document.getElementById('sidebar');
-
 menuBtn.addEventListener('click', () => { sidebar.classList.toggle('hidden'); });
-
-document.querySelectorAll('.group-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        renderGroupData(e.target.dataset.group);
-        document.querySelector('.title').innerText = `川の調査記録 - ${dummyData[e.target.dataset.group].name}`;
-        sidebar.classList.add('hidden');
-    });
-});
-
-document.getElementById('btn-heatmap').addEventListener('click', () => {
-    renderHeatmap();
-    sidebar.classList.add('hidden');
-});
-
-document.getElementById('heatmap-filter').addEventListener('change', (e) => {
-    drawHeatLayer(e.target.value);
-});
-
-document.getElementById('btn-reload').addEventListener('click', () => {
-    alert("最新のデータを取得しました！");
-    sidebar.classList.add('hidden');
-});

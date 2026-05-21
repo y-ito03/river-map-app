@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# データベースとメディアファイルを除外
+backend/database.sqlite
+backend/media/
+backend/uploads/
