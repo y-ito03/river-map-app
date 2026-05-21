@@ -132,13 +132,14 @@ document.getElementById('input-image').addEventListener('change', (e) => {
 });
 
 // 「とうろく！」ボタンを押したときのサーバー送信処理
+// frontend/wizard.js の一番下（とうろくボタンの処理）をすべて上書き
+
 document.getElementById('submit-btn').addEventListener('click', async () => {
     const submitBtn = document.getElementById('submit-btn');
-    submitBtn.innerText = "そうしんちゅう...";
+    submitBtn.innerText = "そうしんちゅう...⏳";
     submitBtn.disabled = true;
 
     try {
-        // FormDataを使って、画像とテキストを一括梱包
         const formData = new FormData();
         formData.append('nickname', document.getElementById('input-nickname').value);
         formData.append('creature', window.wizardData.creature);
@@ -149,25 +150,30 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
             formData.append('image', fileInput.files[0]);
         }
 
-        const response = await fetch(`http://localhost:8000/api/detections/${window.wizardData.targetMarkerId}/posts`, {
+        // 🌟 スマホでもPCでも自動的に正しいサーバーを見つける魔法のURL
+        const BACKEND_URL = `http://${window.location.hostname}:8000`;
+        
+        const response = await fetch(`${BACKEND_URL}/api/detections/${window.wizardData.targetMarkerId}/posts`, {
             method: 'POST',
             body: formData
         });
+
+        if (!response.ok) {
+            throw new Error(`サーバーエラー: ${response.status}`);
+        }
 
         const result = await response.json();
         console.log("サーバーからの返答:", result);
         
         alert("とうろくが かんりょうしました！✨");
         document.getElementById('wizard-modal').classList.add('hidden');
-        
-        // メイン画面の「最新状態にする」ボタンを強制クリックして画面を自動更新
         document.getElementById('btn-reload').click();
 
     } catch (error) {
         console.error("送信エラー:", error);
         alert("エラーがおきました。もういちどためしてね。");
     } finally {
-        submitBtn.innerText = "とうろく！";
+        submitBtn.innerText = "とうろく！ ✨";
         submitBtn.disabled = false;
     }
 });

@@ -1,4 +1,6 @@
 // main.js
+// frontend/main.js の一番上に追加
+const BACKEND_URL = `http://${window.location.hostname}:8000`;
 import './style.css';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -48,7 +50,7 @@ window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
     const det = surveyData[groupId].detections.find(d => d.id === detId);
     
     // 【変更】データベースから取得したサムネイル画像のパス（URL）を組み込む
-    const thumbUrl = det.thumbnail_url ? `http://localhost:8000/${det.thumbnail_url}` : '';
+    const thumbUrl = det.thumbnail_url ? `${BACKEND_URL}/${det.thumbnail_url}` : '';
 
     let html = `
         <div>
@@ -72,7 +74,7 @@ window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
         
         // 🌟【新規】画像URLがあれば<img>タグを作り、無ければ空にする
         const userImgHtml = post.image_url 
-            ? `<div style="margin-top:10px;"><img src="http://localhost:8000/${post.image_url}" style="width:100%; border-radius:8px; object-fit:cover;"></div>` 
+            ? `<div style="margin-top:10px;"><img src="${BACKEND_URL}/${post.image_url}" style="width:100%; border-radius:8px; object-fit:cover;"></div>` 
             : '';
 
         html += `
@@ -259,7 +261,7 @@ function updateSidebarMenu() {
 
 async function loadSurveyData() {
     try {
-        const response = await fetch('http://localhost:8000/api/surveys');
+        const response = await fetch(`${BACKEND_URL}/api/surveys`);
         surveyData = await response.json();
         console.log("サーバーからデータを取得しました:", surveyData);
         
