@@ -12,25 +12,31 @@ import iconUrl from 'leaflet/dist/images/marker-icon.png';
 import shadowUrl from 'leaflet/dist/images/marker-shadow.png';
 L.Icon.Default.mergeOptions({ iconRetinaUrl, iconUrl, shadowUrl });
 
+// --- 【変更】ベクター画像を表示する範囲（ご指定の座標） ---
+const imageBounds = [
+    [35.0668688174732, 135.78416397658356], // 左上 (北西)
+    [35.06464445892178, 135.78518787088882]  // 右下 (南東)
+];
+
 // --- 地図の初期化 ---
 const map = L.map('map', { 
-    minZoom: 14, // 14まで縮小できるように変更
-    maxZoom: 20  // 20まで拡大できるように変更（超拡大モード）
-}).setView([35.0658, 135.7847], 17);
+    minZoom: 17, 
+    maxZoom: 22, // ベクター画像なので、かなり拡大しても綺麗に表示されます
+    maxBounds: imageBounds, // イラストの範囲外に行き過ぎないように制限
+    maxBoundsViscosity: 1.0
+}).fitBounds(imageBounds); // イラスト全体が収まるように表示
 
-L.tileLayer('/tiles/{z}/{x}/{y}.jpg', {
-    minZoom: 14, 
-    maxZoom: 20, 
-    maxNativeZoom: 18, // 画像データとして存在するのは18まで。それ以上は画像を強制的に引き伸ばす
-    attribution: 'Map data &copy; 国土地理院'
+// --- 【変更】タイル地図を廃止し、ベクターイラストをオーバーレイとして表示 ---
+L.imageOverlay('/river_map4.svg', imageBounds, {
+    interactive: true,
+    opacity: 1.0
 }).addTo(map);
 
-// 【追加】画面サイズの誤認を防ぐ自動調整プログラム
+// 画面サイズの誤認を防ぐ自動調整
 const resizeObserver = new ResizeObserver(() => {
-    map.invalidateSize(); // 地図に「枠の大きさが変わったから再計算して！」と命令する
+    map.invalidateSize();
 });
 resizeObserver.observe(document.getElementById('map'));
-//
 
 let currentPolyline = null; 
 let currentMarkers = [];    
@@ -52,7 +58,7 @@ window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
             </div>
             
             <button onclick="window.openWizard('${det.id}')" style="margin-bottom:20px; padding:12px 15px; background:#4CAF50; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; width:100%; font-size: 1.1em;">
-                ＋ ついかする
+                ＋ ついかする！
             </button>
     `;
 
@@ -128,38 +134,31 @@ function renderGroupData(groupId) {
         currentMarkers.push(marker);
     });
 
-    map.fitBounds(currentPolyline.getBounds());
+    // イラストの範囲に収まっているか自動調整
+    map.fitBounds(imageBounds);
 }
 
-// --- 【追加】指定した生物のヒートマップ（熱源）を描画する関数 ---
+// --- ヒートマップ（熱源）を描画する関数 ---
 function drawHeatLayer(targetCreature) {
     if (currentHeatLayer) map.removeLayer(currentHeatLayer);
-
     let heatPoints = [];
-    
-    // 全データから、条件に合うものだけを抽出する
     Object.values(dummyData).forEach(group => {
         group.detections.forEach(det => {
             if (targetCreature === 'all' || det.class_name === targetCreature) {
-                // [緯度, 経度, 強度] の配列を作成して追加
                 heatPoints.push([det.lat, det.lng, 1]); 
             }
         });
     });
-
-    // ヒートマップを地図に追加
     currentHeatLayer = L.heatLayer(heatPoints, { radius: 25, blur: 15, maxZoom: 18 }).addTo(map);
 }
 
-// --- ヒートマップモードの準備とUI構築を行う関数 ---
+// --- ヒートマップモードの準備 ---
 function renderHeatmap() {
     clearMap(); 
     currentGroupId = "heatmap";
     document.querySelector('.title').innerText = `川の調査記録 - ヒートマップモード`;
 
     let creatureCounts = {}; 
-
-    // 全ての生物の出現数を集計する
     Object.values(dummyData).forEach(group => {
         group.detections.forEach(det => {
             if (creatureCounts[det.class_name]) {
@@ -170,22 +169,16 @@ function renderHeatmap() {
         });
     });
 
-    // リストの初期化
     const ul = document.getElementById('summary-list');
     ul.innerHTML = ''; 
-    
-    // ドロップダウンの初期化
     const filterSelect = document.getElementById('heatmap-filter');
     filterSelect.innerHTML = '<option value="all">すべてのいきもの</option>';
 
-    // 集計結果をもとに、リストとドロップダウンの項目（option）を作成
     for (const [name, count] of Object.entries(creatureCounts)) {
-        // リスト（〇〇 : 〇匹）の追加
         const li = document.createElement('li');
         li.innerText = `${name} : ${count}匹`;
         ul.appendChild(li);
 
-        // ドロップダウンの選択肢の追加
         const option = document.createElement('option');
         option.value = name;
         option.innerText = name;
@@ -193,13 +186,10 @@ function renderHeatmap() {
     }
     
     document.getElementById('summary-panel').classList.remove('hidden');
-
-    // 初期状態として「すべて」のヒートマップを描画する
     drawHeatLayer('all');
 }
 
-
-// --- UI（メニュー・ボタン等）の動作 ---
+// --- UIの動作 ---
 const menuBtn = document.getElementById('menu-btn');
 const sidebar = document.getElementById('sidebar');
 
@@ -218,12 +208,11 @@ document.getElementById('btn-heatmap').addEventListener('click', () => {
     sidebar.classList.add('hidden');
 });
 
-// 【追加】ドロップダウンが変更されたら、ヒートマップを描き直す
 document.getElementById('heatmap-filter').addEventListener('change', (e) => {
     drawHeatLayer(e.target.value);
 });
 
 document.getElementById('btn-reload').addEventListener('click', () => {
-    alert("最新のデータを取得しました！（※今はダミーなので画面は変わりません）");
+    alert("最新のデータを取得しました！");
     sidebar.classList.add('hidden');
 });
