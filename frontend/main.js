@@ -214,7 +214,7 @@ function updateSidebarMenu() {
         btn.className = 'nav-btn group-btn';
         btn.dataset.group = groupId;
         // CSVの original_video_filename（例: GX010033.MP4）をボタン名にする
-        btn.innerText = `🎥 ${group.name} の記録`; 
+        btn.innerText = `${group.name} の記録`; 
         
         btn.addEventListener('click', () => {
             renderGroupData(groupId);

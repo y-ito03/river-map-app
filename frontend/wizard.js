@@ -136,7 +136,7 @@ document.getElementById('input-image').addEventListener('change', (e) => {
 
 document.getElementById('submit-btn').addEventListener('click', async () => {
     const submitBtn = document.getElementById('submit-btn');
-    submitBtn.innerText = "そうしんちゅう...⏳";
+    submitBtn.innerText = "そうしんちゅう...";
     submitBtn.disabled = true;
 
     try {
@@ -150,7 +150,7 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
             formData.append('image', fileInput.files[0]);
         }
 
-        // 🌟 スマホでもPCでも自動的に正しいサーバーを見つける魔法のURL
+        //  スマホでもPCでも自動的に正しいサーバーを見つける魔法のURL
         const BACKEND_URL = `http://${window.location.hostname}:8000`;
         
         const response = await fetch(`${BACKEND_URL}/api/detections/${window.wizardData.targetMarkerId}/posts`, {
@@ -165,7 +165,7 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
         const result = await response.json();
         console.log("サーバーからの返答:", result);
         
-        alert("とうろくが かんりょうしました！✨");
+        alert("とうろくが かんりょうしました！");
         document.getElementById('wizard-modal').classList.add('hidden');
         document.getElementById('btn-reload').click();
 
@@ -173,7 +173,7 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
         console.error("送信エラー:", error);
         alert("エラーがおきました。もういちどためしてね。");
     } finally {
-        submitBtn.innerText = "とうろく！ ✨";
+        submitBtn.innerText = "とうろく！";
         submitBtn.disabled = false;
     }
 });
