@@ -150,10 +150,7 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
             formData.append('image', fileInput.files[0]);
         }
 
-        //  スマホでもPCでも自動的に正しいサーバーを見つける魔法のURL
-        const BACKEND_URL = `http://${window.location.hostname}:8000`;
-        
-        const response = await fetch(`${BACKEND_URL}/api/detections/${window.wizardData.targetMarkerId}/posts`, {
+        const response = await fetch(`/api/detections/${window.wizardData.targetMarkerId}/posts`, {
             method: 'POST',
             body: formData
         });

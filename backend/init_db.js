@@ -2,11 +2,14 @@
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const fs = require('fs');
+const path = require('path');
 const csv = require('csv-parser');
 const crypto = require('crypto'); // ランダムなIDを作るためのツール
 
 async function setupDatabase() {
-    const db = await open({ filename: 'database.sqlite', driver: sqlite3.Database });
+    const databaseFile = path.join(__dirname, 'database.sqlite');
+    const csvFile = path.join(__dirname, 'results.csv');
+    const db = await open({ filename: databaseFile, driver: sqlite3.Database });
 
     console.log("📦 データベースのテーブルを作成中...");
     
@@ -44,7 +47,7 @@ async function setupDatabase() {
     console.log("📄 CSVファイル (results.csv) を読み込んでいます...");
 
     // CSVを1行ずつ読み込んでデータベースに保存
-    fs.createReadStream('results.csv')
+    fs.createReadStream(csvFile)
         .pipe(csv())
         .on('data', async (row) => {
             // processing_id をグループIDとして扱う

@@ -1,6 +1,5 @@
 // backend/server.js
 const express = require('express');
-const cors = require('cors');
 const sqlite3 = require('sqlite3');
 const { open } = require('sqlite');
 const multer = require('multer'); // ファイルを処理するツール
@@ -8,21 +7,34 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 8000;
+const PORT = process.env.PORT || 8000;
+const mediaDir = path.join(__dirname, 'media');
+const uploadDir = path.join(mediaDir, 'uploads');
+const databaseFile = path.join(__dirname, 'database.sqlite');
 
-app.use(cors());
 app.use(express.json());
-app.use(express.static('media'));
+app.use('/media', (req, res, next) => {
+    const requestedPath = decodeURIComponent(req.path).replace(/^\/+/, '');
+    const filePath = path.resolve(mediaDir, requestedPath);
+
+    if (!filePath.startsWith(mediaDir + path.sep)) {
+        return res.status(403).json({ error: "アクセスできないパスです" });
+    }
+
+    res.sendFile(filePath, (err) => {
+        if (err) next();
+    });
+});
+app.use(express.static(mediaDir));
 
 // 画像アップロード用の設定
-const uploadDir = path.join(__dirname, 'media', 'uploads');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true }); // uploadsフォルダが無ければ自動作成
 }
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, 'media/uploads/') // 保存先
+        cb(null, uploadDir) // 保存先
     },
     filename: function (req, file, cb) {
         // 名前が被らないように「時間＋元のファイル形式」で保存
@@ -32,9 +44,6 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 let db;
-(async () => {
-    db = await open({ filename: 'database.sqlite', driver: sqlite3.Database });
-})();
 
 // ① 全データを取得する窓口
 app.get('/api/surveys', async (req, res) => {
@@ -96,6 +105,15 @@ app.post('/api/detections/:id/posts', upload.single('image'), async (req, res) =
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`バックエンドサーバーが起動しました: http://localhost:${PORT}`);
+async function startServer() {
+    db = await open({ filename: databaseFile, driver: sqlite3.Database });
+
+    app.listen(PORT, () => {
+        console.log(`バックエンドサーバーが起動しました: http://localhost:${PORT}`);
+    });
+}
+
+startServer().catch((err) => {
+    console.error("バックエンドサーバーの起動に失敗しました:", err);
+    process.exit(1);
 });
