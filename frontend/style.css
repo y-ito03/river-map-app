@@ -14,7 +14,8 @@ body, html {
   align-items: center; padding: 10px; z-index: 2000;
 }
 .menu-btn {
-  background: none; border: none; color: white; font-size: 1.5em; cursor: pointer; margin-right: 15px;
+  background: none; border: none; color: white; font-size: 1.7em; cursor: pointer; margin-right: 12px;
+  width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center;
 }
 .title { font-size: 1.2em; margin: 0; }
 
@@ -106,6 +107,12 @@ body, html {
 .map-marker.unposted { background: #1976d2; }
 .map-marker.posted { background: #f57c00; }
 .map-marker.free { background: #f57c00; }
+.species-marker {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: #fff; border: 3px solid #f57c00; box-shadow: 0 2px 7px rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.species-marker img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
 /* 投稿ウィザード用デザイン */
 .modal {

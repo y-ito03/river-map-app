@@ -2,6 +2,7 @@
 const API_BASE_URL = '';
 const ACCESS_STORAGE_KEY = 'riverMapAccessCode';
 const TUTORIAL_STORAGE_KEY = 'riverMapTutorialSeen';
+const APP_TITLE = '岩倉川の調査記録';
 
 import './style.css';
 import L from 'leaflet';
@@ -113,6 +114,22 @@ const classDashPatterns = {
     2: '10 8',
     3: '2 8'
 };
+const classNames = {
+    1: 'Davis',
+    2: 'Hardy',
+    3: 'Learned'
+};
+const classNameToNumber = {
+    davis: 1,
+    hardy: 2,
+    learned: 3
+};
+const speciesIconMap = [
+    { keywords: ['アカハライモリ', 'イモリ'], url: '/species-icons/akaharaimori.svg' },
+    { keywords: ['サワガニ'], url: '/species-icons/sawagani.svg' },
+    { keywords: ['ハグロトンボ', 'ハグロトンボのヤゴ'], url: '/species-icons/hagurotonbo-yago.svg' },
+    { keywords: ['コオニヤンマ', 'コオニヤンマのヤゴ'], url: '/species-icons/kooni-yago.svg' }
+];
 
 const legendPanel = document.createElement('div');
 legendPanel.id = 'legend-panel';
@@ -144,15 +161,33 @@ coachmarkOverlay.innerHTML = `
 document.getElementById('app').appendChild(coachmarkOverlay);
 
 function parseGroupInfo(groupName) {
-    const match = String(groupName || '').match(/(\d+)\s*組.*?(\d+)\s*班/);
-    if (!match) {
-        return { classNumber: 1, teamNumber: 1 };
+    const name = String(groupName || '');
+    const japaneseMatch = name.match(/(\d+)\s*組.*?(\d+)\s*班/);
+    if (japaneseMatch) {
+        return {
+            classNumber: Number(japaneseMatch[1]),
+            teamNumber: Number(japaneseMatch[2])
+        };
     }
 
+    const englishMatch = name.match(/(Davis|Hardy|Learned).*?(\d+)\s*班/i);
+    if (englishMatch) {
+        return {
+            classNumber: classNameToNumber[englishMatch[1].toLowerCase()] || 1,
+            teamNumber: Number(englishMatch[2])
+        };
+    }
+
+    const teamMatch = name.match(/(\d+)\s*班/);
     return {
-        classNumber: Number(match[1]),
-        teamNumber: Number(match[2])
+        classNumber: 1,
+        teamNumber: teamMatch ? Number(teamMatch[1]) : 1
     };
+}
+
+function getDisplayGroupName(groupName) {
+    const { classNumber, teamNumber } = parseGroupInfo(groupName);
+    return `${classNames[classNumber] || `Class ${classNumber}`} ${teamNumber}班`;
 }
 
 function getGroupStyle(groupName) {
@@ -184,6 +219,36 @@ function createMarkerIcon(type) {
         iconSize: [34, 34],
         iconAnchor: [17, 34]
     });
+}
+
+function getSpeciesIconUrl(creatureName) {
+    const name = String(creatureName || '');
+    const match = speciesIconMap.find(item => item.keywords.some(keyword => name.includes(keyword)));
+    return match?.url || '/species-icons/other.svg';
+}
+
+function getPrimaryPostCreature(posts) {
+    if (!posts || posts.length === 0) return '';
+    const latestPost = posts[posts.length - 1];
+    return latestPost.creature || '';
+}
+
+function createSpeciesMarkerIcon(creatureName) {
+    const iconUrl = getSpeciesIconUrl(creatureName);
+    return L.divIcon({
+        className: '',
+        html: `
+            <div class="species-marker">
+                <img src="${iconUrl}" alt="">
+            </div>
+        `,
+        iconSize: [40, 40],
+        iconAnchor: [20, 40]
+    });
+}
+
+function createPostedIcon(posts) {
+    return createSpeciesMarkerIcon(getPrimaryPostCreature(posts));
 }
 
 function setFreePostMode(enabled) {
@@ -318,7 +383,7 @@ function clearMap() {
 
 function renderFreePostMarkers() {
     freePosts.forEach(post => {
-        const marker = L.marker([post.lat, post.lng], { icon: createMarkerIcon('free') }).addTo(map);
+        const marker = L.marker([post.lat, post.lng], { icon: createSpeciesMarkerIcon(post.creature) }).addTo(map);
         marker.on('click', () => openFreePostPanel(post.id));
         currentMarkers.push(marker);
     });
@@ -333,7 +398,7 @@ function renderPostedDetectionMarkers(classFilter = 'all') {
 
             const marker = L.marker([det.lat, det.lng], {
                 detId: det.id,
-                icon: createMarkerIcon('posted')
+                icon: createPostedIcon(det.user_posts)
             }).addTo(map);
             marker.on('click', () => { window.openDetailPanel(groupId, det.id, 0); });
             currentMarkers.push(marker);
@@ -359,7 +424,7 @@ function renderGroupData(groupId) {
             const hasPosts = det.user_posts && det.user_posts.length > 0;
             const marker = L.marker([det.lat, det.lng], {
                 detId: det.id,
-                icon: createMarkerIcon(hasPosts ? 'posted' : 'unposted')
+                icon: hasPosts ? createPostedIcon(det.user_posts) : createMarkerIcon('unposted')
             }).addTo(map);
             marker.on('click', () => { window.openDetailPanel(groupId, det.id, 0); });
             currentMarkers.push(marker);
@@ -376,8 +441,8 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
     allTracksClassFilter = classFilter;
     clearMap();
     document.querySelector('.title').innerText = classFilter === 'all'
-        ? '川の調査記録 - 全班の軌跡'
-        : `川の調査記録 - ${classFilter}組の軌跡`;
+        ? `${APP_TITLE} - 全班の軌跡`
+        : `${APP_TITLE} - ${classNames[classFilter]}の軌跡`;
 
     const legendItems = [];
     Object.entries(surveyData).forEach(([groupId, group]) => {
@@ -388,14 +453,14 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
         const line = L.polyline(group.gps_track, style).addTo(map);
         line.on('click', () => {
             renderGroupData(groupId);
-            document.querySelector('.title').innerText = `川の調査記録 - ${group.name}`;
+            document.querySelector('.title').innerText = `${APP_TITLE} - ${getDisplayGroupName(group.name)}`;
         });
         currentTrackLayers.push(line);
 
         legendItems.push(`
             <div class="legend-item">
                 <span class="legend-line ${getLegendLineClass(group.name)}" style="border-top-color:${style.color};"></span>
-                <span>${escapeHtml(group.name)}</span>
+                <span>${escapeHtml(getDisplayGroupName(group.name))}</span>
             </div>
         `);
     });
@@ -406,9 +471,9 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
         <h3>凡例</h3>
         <select id="track-class-filter" class="track-filter" aria-label="表示する組">
             <option value="all" ${classFilter === 'all' ? 'selected' : ''}>すべての組</option>
-            <option value="1" ${classFilter === '1' ? 'selected' : ''}>1組だけ</option>
-            <option value="2" ${classFilter === '2' ? 'selected' : ''}>2組だけ</option>
-            <option value="3" ${classFilter === '3' ? 'selected' : ''}>3組だけ</option>
+            <option value="1" ${classFilter === '1' ? 'selected' : ''}>Davisだけ</option>
+            <option value="2" ${classFilter === '2' ? 'selected' : ''}>Hardyだけ</option>
+            <option value="3" ${classFilter === '3' ? 'selected' : ''}>Learnedだけ</option>
         </select>
         ${legendItems.length > 0 ? legendItems.join('') : '<p style="margin:0; color:#666;">表示できる軌跡がありません。</p>'}
     `;
@@ -442,7 +507,7 @@ function renderHeatmap() {
     setFreePostMode(false);
     clearMap();
     currentGroupId = "heatmap";
-    document.querySelector('.title').innerText = `川の調査記録 - ヒートマップモード`;
+    document.querySelector('.title').innerText = `${APP_TITLE} - ヒートマップモード`;
 
     let creatureCounts = {};
     Object.values(surveyData).forEach(group => {
@@ -489,7 +554,7 @@ const coachmarkSteps = [
     {
         selector: '#btn-all-tracks',
         title: '全班の軌跡',
-        body: 'すべての班の移動軌跡を重ねて表示します。表示中に凡例のメニューから1組、2組、3組を選べます。',
+        body: 'すべての班の移動軌跡を重ねて表示します。表示中に凡例のメニューからDavis、Hardy、Learnedを選べます。',
         before: () => document.getElementById('sidebar').classList.remove('hidden')
     },
     {
@@ -501,7 +566,7 @@ const coachmarkSteps = [
     {
         selector: '#map',
         title: '地図',
-        body: 'ピンを押すと、その場所の画像や投稿が見られます。オレンジ色のピンは投稿がある場所です。',
+        body: 'ピンを押すと、その場所の画像や投稿が見られます。投稿がある場所は生物アイコンで表示されます。',
         before: () => document.getElementById('sidebar').classList.add('hidden')
     },
     {
@@ -593,11 +658,11 @@ function updateSidebarMenu() {
         const btn = document.createElement('button');
         btn.className = 'nav-btn group-btn';
         btn.dataset.group = groupId;
-        btn.innerText = `${group.name} の記録`;
+        btn.innerText = `${getDisplayGroupName(group.name)} の記録`;
 
         btn.addEventListener('click', () => {
             renderGroupData(groupId);
-            document.querySelector('.title').innerText = `川の調査記録 - ${group.name}`;
+            document.querySelector('.title').innerText = `${APP_TITLE} - ${getDisplayGroupName(group.name)}`;
             document.getElementById('sidebar').classList.add('hidden');
         });
 
