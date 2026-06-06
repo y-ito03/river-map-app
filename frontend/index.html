@@ -7,11 +7,19 @@
 </head>
 <body>
   <div id="app">
+    <div id="access-gate" class="modal hidden">
+      <div class="modal-content access-content">
+        <h2>アクセスできません</h2>
+        <p>このアプリは、配布されたQRコードからアクセスした人だけが使えます。</p>
+        <p>先生から配られたQRコードをもう一度読み取ってください。</p>
+      </div>
+    </div>
 
     <!-- 投稿ウィザードの画面（最初は隠れています） -->
     <div id="wizard-modal" class="modal hidden">
       <div class="modal-content">
         <button id="close-wizard" class="close-btn">✖ やめる</button>
+        <p id="wizard-target-label" class="wizard-target-label"></p>
         
         <div id="step-1" class="wizard-step active">
           <h3>なまえ（ニックネーム）を おしえてね</h3>
@@ -35,6 +43,9 @@
           <h3>かいた え や、しゃしん を えらんでね</h3>
           <input type="file" id="input-image" accept="image/*" class="large-input">
           <img id="preview-image" style="max-width: 100%; max-height: 200px; display: none; margin-top: 10px; border-radius: 8px;">
+          <h3>概念図があれば えらんでね</h3>
+          <input type="file" id="input-concept-image" accept="image/*" class="large-input">
+          <img id="preview-concept-image" style="max-width: 100%; max-height: 200px; display: none; margin-top: 10px; border-radius: 8px;">
           <div class="btn-area">
             <button class="prev-btn" data-prev="2">もどる</button>
             <button class="next-btn" data-next="4">つぎへ</button>
@@ -56,7 +67,10 @@
             <p><b>なまえ:</b> <span id="confirm-nickname"></span></p>
             <p><b>いきもの:</b> <span id="confirm-creature"></span></p>
             <p><b>コメント:</b> <span id="confirm-comment"></span></p>
+            <p><b>かいた え・しゃしん:</b></p>
             <img id="confirm-image" style="max-width: 100%; max-height: 150px; border-radius: 8px;">
+            <p><b>概念図:</b></p>
+            <img id="confirm-concept-image" style="max-width: 100%; max-height: 150px; border-radius: 8px;">
           </div>
           <div class="btn-area">
             <button class="prev-btn" data-prev="4">もどる</button>

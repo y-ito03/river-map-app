@@ -3,20 +3,38 @@
 // ウィザード内で入力・選択されたデータを一時的に保持するオブジェクト
 window.wizardData = {
     targetMarkerId: null,
+    targetType: "detection",
+    lat: null,
+    lng: null,
     creature: ""
 };
 
 // メインの地図（main.js）から呼び出されてウィザードを開く関数
-window.openWizard = function(markerId) {
-    window.wizardData.targetMarkerId = markerId;
+window.openWizard = function(target) {
+    if (typeof target === 'object' && target.type === 'free') {
+        window.wizardData.targetType = "free";
+        window.wizardData.targetMarkerId = null;
+        window.wizardData.lat = target.lat;
+        window.wizardData.lng = target.lng;
+        document.getElementById('wizard-target-label').innerText = "好きな場所への投稿";
+    } else {
+        window.wizardData.targetType = "detection";
+        window.wizardData.targetMarkerId = target;
+        window.wizardData.lat = null;
+        window.wizardData.lng = null;
+        document.getElementById('wizard-target-label').innerText = "検出ポイントへの投稿";
+    }
     window.wizardData.creature = ""; // 生き物の選択をリセット
     
     // 入力欄のリセット
     document.getElementById('input-nickname').value = "";
     document.getElementById('input-comment').value = "";
     document.getElementById('input-image').value = "";
+    document.getElementById('input-concept-image').value = "";
     document.getElementById('preview-image').style.display = "none";
     document.getElementById('preview-image').src = "";
+    document.getElementById('preview-concept-image').style.display = "none";
+    document.getElementById('preview-concept-image').src = "";
     
     // いきものボタンの選択状態をリセット
     document.querySelectorAll('.creature-btn').forEach(btn => {
@@ -68,6 +86,16 @@ document.querySelectorAll('.next-btn').forEach(btn => {
                 confirmImg.style.display = 'none';
                 confirmImg.src = '';
             }
+
+            const previewConceptImg = document.getElementById('preview-concept-image');
+            const confirmConceptImg = document.getElementById('confirm-concept-image');
+            if (previewConceptImg.style.display !== 'none') {
+                confirmConceptImg.src = previewConceptImg.src;
+                confirmConceptImg.style.display = 'block';
+            } else {
+                confirmConceptImg.style.display = 'none';
+                confirmConceptImg.src = '';
+            }
         }
 
         // 画面の表示切り替え
@@ -113,23 +141,28 @@ document.querySelectorAll('.creature-btn').forEach(btn => {
     });
 });
 
-// 画像が選択された時のプレビュー処理
-document.getElementById('input-image').addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    const preview = document.getElementById('preview-image');
+function setupImagePreview(inputId, previewId) {
+    document.getElementById(inputId).addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        const preview = document.getElementById(previewId);
     
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            preview.src = event.target.result;
-            preview.style.display = 'block';
-        };
-        reader.readAsDataURL(file);
-    } else {
-        preview.src = '';
-        preview.style.display = 'none';
-    }
-});
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                preview.src = event.target.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        } else {
+            preview.src = '';
+            preview.style.display = 'none';
+        }
+    });
+}
+
+// 画像が選択された時のプレビュー処理
+setupImagePreview('input-image', 'preview-image');
+setupImagePreview('input-concept-image', 'preview-concept-image');
 
 // 「とうろく！」ボタンを押したときのサーバー送信処理
 // frontend/wizard.js の一番下（とうろくボタンの処理）をすべて上書き
@@ -150,7 +183,22 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
             formData.append('image', fileInput.files[0]);
         }
 
-        const response = await fetch(`/api/detections/${window.wizardData.targetMarkerId}/posts`, {
+        const conceptFileInput = document.getElementById('input-concept-image');
+        if (conceptFileInput.files.length > 0) {
+            formData.append('conceptImage', conceptFileInput.files[0]);
+        }
+
+        let endpoint;
+        if (window.wizardData.targetType === "free") {
+            formData.append('lat', window.wizardData.lat);
+            formData.append('lng', window.wizardData.lng);
+            endpoint = '/api/free-posts';
+        } else {
+            endpoint = `/api/detections/${window.wizardData.targetMarkerId}/posts`;
+        }
+
+        const fetcher = window.fetchWithAccess || fetch;
+        const response = await fetcher(endpoint, {
             method: 'POST',
             body: formData
         });
@@ -164,7 +212,11 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
         
         alert("とうろくが かんりょうしました！");
         document.getElementById('wizard-modal').classList.add('hidden');
-        document.getElementById('btn-reload').click();
+        if (window.onPostSubmitted) {
+            await window.onPostSubmitted();
+        } else {
+            document.getElementById('btn-reload').click();
+        }
 
     } catch (error) {
         console.error("送信エラー:", error);

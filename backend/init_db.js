@@ -40,7 +40,18 @@ async function setupDatabase() {
             nickname TEXT,
             creature TEXT,
             comment TEXT,
-            image_url TEXT
+            image_url TEXT,
+            concept_image_url TEXT
+        );
+        CREATE TABLE IF NOT EXISTS free_posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lat REAL,
+            lng REAL,
+            nickname TEXT,
+            creature TEXT,
+            comment TEXT,
+            image_url TEXT,
+            concept_image_url TEXT
         );
     `);
 

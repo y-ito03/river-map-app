@@ -8,12 +8,31 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
+const ACCESS_CODE = process.env.ACCESS_CODE || '';
 const mediaDir = path.join(__dirname, 'media');
 const uploadDir = path.join(mediaDir, 'uploads');
 const databaseFile = path.join(__dirname, 'database.sqlite');
 
 app.use(express.json());
+
+function getAccessCode(req) {
+    return req.get('X-Access-Code') || req.query.access || '';
+}
+
+function requireAccess(req, res, next) {
+    if (!ACCESS_CODE || getAccessCode(req) === ACCESS_CODE) {
+        next();
+        return;
+    }
+
+    res.status(401).json({ error: "アクセスコードが正しくありません" });
+}
+
 app.use('/media', (req, res, next) => {
+    if (ACCESS_CODE && getAccessCode(req) !== ACCESS_CODE) {
+        return res.status(401).json({ error: "アクセスコードが正しくありません" });
+    }
+
     const requestedPath = decodeURIComponent(req.path).replace(/^\/+/, '');
     const filePath = path.resolve(mediaDir, requestedPath);
 
@@ -25,7 +44,6 @@ app.use('/media', (req, res, next) => {
         if (err) next();
     });
 });
-app.use(express.static(mediaDir));
 
 // 画像アップロード用の設定
 if (!fs.existsSync(uploadDir)) {
@@ -38,21 +56,30 @@ const storage = multer.diskStorage({
     },
     filename: function (req, file, cb) {
         // 名前が被らないように「時間＋元のファイル形式」で保存
-        cb(null, 'post_' + Date.now() + path.extname(file.originalname));
+        const prefix = file.fieldname === 'conceptImage' ? 'concept_' : 'post_';
+        cb(null, prefix + Date.now() + '_' + Math.round(Math.random() * 1E9) + path.extname(file.originalname));
     }
 });
 const upload = multer({ storage: storage });
+const postUpload = upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'conceptImage', maxCount: 1 }
+]);
 
 let db;
 
+app.get('/api/access-check', requireAccess, (req, res) => {
+    res.json({ status: "ok" });
+});
+
 // ① 全データを取得する窓口
-app.get('/api/surveys', async (req, res) => {
+app.get('/api/surveys', requireAccess, async (req, res) => {
     console.log("【受信】フロントエンドからデータ取得リクエストが来ました");
-    const surveyData = {};
+    const groupsData = {};
     try {
         const groups = await db.all("SELECT * FROM groups");
         for (const group of groups) {
-            surveyData[group.id] = {
+            groupsData[group.id] = {
                 name: group.name,
                 gps_track: JSON.parse(group.gps_track),
                 detections: []
@@ -60,8 +87,8 @@ app.get('/api/surveys', async (req, res) => {
             const detections = await db.all("SELECT * FROM detections WHERE group_id = ?", group.id);
             for (const det of detections) {
                 // image_url も一緒に取得するように追加
-                const posts = await db.all("SELECT nickname, creature, comment, image_url FROM user_posts WHERE detection_id = ?", det.id);
-                surveyData[group.id].detections.push({
+                const posts = await db.all("SELECT nickname, creature, comment, image_url, concept_image_url FROM user_posts WHERE detection_id = ?", det.id);
+                groupsData[group.id].detections.push({
                     id: det.id,
                     lat: det.lat,
                     lng: det.lng,
@@ -72,7 +99,8 @@ app.get('/api/surveys', async (req, res) => {
                 });
             }
         }
-        res.json(surveyData);
+        const freePosts = await db.all("SELECT id, lat, lng, nickname, creature, comment, image_url, concept_image_url FROM free_posts ORDER BY id ASC");
+        res.json({ groups: groupsData, free_posts: freePosts });
     } catch (err) {
         console.error("データベースエラー:", err);
         res.status(500).json({ error: "データの取得に失敗しました" });
@@ -81,22 +109,25 @@ app.get('/api/surveys', async (req, res) => {
 
 // ② 児童の追加投稿を受け取る窓口（画像ファイル対応）
 // upload.single('image') を追加し、ファイルを受け取れるようにする
-app.post('/api/detections/:id/posts', upload.single('image'), async (req, res) => {
+app.post('/api/detections/:id/posts', requireAccess, postUpload, async (req, res) => {
     const detectionId = req.params.id;
     const postData = req.body; // テキストデータ
-    const file = req.file;     // 画像ファイルデータ
+    const imageFile = req.files?.image?.[0];
+    const conceptFile = req.files?.conceptImage?.[0];
 
     console.log(`【受信】ピン [${detectionId}] への新しい投稿:`, postData);
-    if (file) console.log(`画像も受信しました: ${file.filename}`);
+    if (imageFile) console.log(`画像も受信しました: ${imageFile.filename}`);
+    if (conceptFile) console.log(`概念図も受信しました: ${conceptFile.filename}`);
 
     // 画像があればそのパスを作成、無ければ null
-    const imageUrl = file ? `uploads/${file.filename}` : null;
+    const imageUrl = imageFile ? `uploads/${imageFile.filename}` : null;
+    const conceptImageUrl = conceptFile ? `uploads/${conceptFile.filename}` : null;
 
     try {
         // image_url もデータベースに保存する
         await db.run(
-            "INSERT INTO user_posts (detection_id, nickname, creature, comment, image_url) VALUES (?, ?, ?, ?, ?)",
-            [detectionId, postData.nickname, postData.creature, postData.comment, imageUrl]
+            "INSERT INTO user_posts (detection_id, nickname, creature, comment, image_url, concept_image_url) VALUES (?, ?, ?, ?, ?, ?)",
+            [detectionId, postData.nickname, postData.creature, postData.comment, imageUrl, conceptImageUrl]
         );
         res.json({ status: "success", message: "投稿をデータベースに保存しました！" });
     } catch (err) {
@@ -105,11 +136,75 @@ app.post('/api/detections/:id/posts', upload.single('image'), async (req, res) =
     }
 });
 
+app.post('/api/free-posts', requireAccess, postUpload, async (req, res) => {
+    const postData = req.body;
+    const lat = parseFloat(postData.lat);
+    const lng = parseFloat(postData.lng);
+    const imageFile = req.files?.image?.[0];
+    const conceptFile = req.files?.conceptImage?.[0];
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+        return res.status(400).json({ error: "投稿場所が正しくありません" });
+    }
+
+    const imageUrl = imageFile ? `uploads/${imageFile.filename}` : null;
+    const conceptImageUrl = conceptFile ? `uploads/${conceptFile.filename}` : null;
+
+    try {
+        await db.run(
+            `INSERT INTO free_posts (lat, lng, nickname, creature, comment, image_url, concept_image_url)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [lat, lng, postData.nickname, postData.creature, postData.comment, imageUrl, conceptImageUrl]
+        );
+        res.json({ status: "success", message: "自由投稿を保存しました！" });
+    } catch (err) {
+        console.error("自由投稿の保存エラー:", err);
+        res.status(500).json({ error: "保存に失敗しました" });
+    }
+});
+
+async function addColumnIfMissing(tableName, columnName, columnDefinition) {
+    const columns = await db.all(`PRAGMA table_info(${tableName})`);
+    if (!columns.some((column) => column.name === columnName)) {
+        await db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+    }
+}
+
+async function ensureSchema() {
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS user_posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            detection_id TEXT,
+            nickname TEXT,
+            creature TEXT,
+            comment TEXT,
+            image_url TEXT,
+            concept_image_url TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS free_posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lat REAL,
+            lng REAL,
+            nickname TEXT,
+            creature TEXT,
+            comment TEXT,
+            image_url TEXT,
+            concept_image_url TEXT
+        );
+    `);
+    await addColumnIfMissing('user_posts', 'concept_image_url', 'TEXT');
+}
+
 async function startServer() {
     db = await open({ filename: databaseFile, driver: sqlite3.Database });
+    await ensureSchema();
 
     app.listen(PORT, () => {
         console.log(`バックエンドサーバーが起動しました: http://localhost:${PORT}`);
+        if (ACCESS_CODE) {
+            console.log("アクセスコード保護が有効です");
+        }
     });
 }
 

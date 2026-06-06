@@ -31,6 +31,7 @@ body, html {
   border: none; border-bottom: 1px solid #eee; font-size: 1.1em; cursor: pointer;
 }
 .nav-btn:hover { background-color: #f0f0f0; }
+.nav-btn.active { background-color: #e8f5e9; color: #2e7d32; font-weight: bold; }
 
 /* メインコンテナとサイドパネル */
 #main-container {
@@ -74,6 +75,38 @@ body, html {
 .summary-panel ul { list-style: none; padding: 0; margin: 0; }
 .summary-panel li { margin-bottom: 8px; font-size: 1.1em; font-weight: bold; color: #333; }
 
+.legend-panel {
+  position: absolute; bottom: 20px; left: 20px; background-color: rgba(255, 255, 255, 0.95);
+  padding: 12px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.25); z-index: 1000;
+  max-height: 40vh; overflow-y: auto; min-width: 190px;
+}
+.legend-panel.hidden { display: none; }
+.legend-panel h3 { margin: 0 0 10px 0; font-size: 1em; }
+.legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.9em; }
+.legend-line { width: 34px; height: 0; border-top: 4px solid #333; }
+.legend-line.dashed { border-top-style: dashed; }
+.legend-line.dotted { border-top-style: dotted; }
+.track-filter { width: 100%; padding: 8px; margin-bottom: 12px; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; background: #fff; }
+
+.free-post-banner {
+  position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+  background: #fff3cd; border: 1px solid #fbc02d; color: #333; z-index: 1800;
+  border-radius: 8px; padding: 10px 14px; font-weight: bold; box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+.free-post-banner.hidden { display: none; }
+
+.map-marker {
+  width: 28px; height: 28px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+}
+.map-marker::after {
+  content: ""; position: absolute; width: 9px; height: 9px; border-radius: 50%;
+  background: #fff; top: 7px; left: 7px;
+}
+.map-marker.unposted { background: #1976d2; }
+.map-marker.posted { background: #f57c00; }
+.map-marker.free { background: #f57c00; }
+
 /* 投稿ウィザード用デザイン */
 .modal {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -98,3 +131,40 @@ body, html {
 .creature-btn { padding: 20px 10px; font-size: 1.1em; font-weight: bold; border: 2px solid #4CAF50; background-color: white; color: #4CAF50; border-radius: 8px; cursor: pointer; }
 .creature-btn.selected { background-color: #4CAF50; color: white; }
 .confirm-box { background: #f9f9f9; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; }
+.wizard-target-label { margin: 0 30px 10px 0; color: #2e7d32; font-weight: bold; }
+.post-image-label { display: block; margin-top: 12px; font-weight: bold; color: #333; }
+.post-image { width: 100%; border-radius: 8px; object-fit: cover; margin-top: 6px; }
+.access-content { text-align: left; }
+
+.coachmark-overlay {
+  position: fixed; inset: 0; z-index: 5000; pointer-events: auto;
+}
+.coachmark-overlay.hidden { display: none; }
+.coachmark-dim {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.58);
+}
+.coachmark-highlight {
+  position: fixed; border: 3px solid #ffca28; border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.58), 0 0 18px rgba(255,202,40,0.9);
+  transition: top 0.2s, left 0.2s, width 0.2s, height 0.2s;
+  pointer-events: none;
+}
+.coachmark-card {
+  position: fixed; width: min(360px, calc(100vw - 32px)); background: #fff;
+  color: #222; border-radius: 8px; padding: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+.coachmark-card h2 { margin: 0 0 8px; font-size: 1.15em; }
+.coachmark-card p { margin: 0 0 14px; line-height: 1.6; }
+.coachmark-actions { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.coachmark-actions button {
+  border: none; border-radius: 8px; padding: 10px 14px; font-weight: bold; cursor: pointer;
+}
+.coachmark-skip { background: #e0e0e0; color: #333; }
+.coachmark-next { background: #4CAF50; color: #fff; }
+.coachmark-count { color: #666; font-size: 0.9em; }
+
+@media (max-width: 800px) {
+  .detail-panel { width: 100%; min-width: 0; position: absolute; right: 0; top: 0; bottom: 0; }
+  .sidebar { width: 85%; }
+  .legend-panel { left: 10px; right: 10px; bottom: 10px; max-height: 30vh; }
+}
