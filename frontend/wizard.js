@@ -44,13 +44,13 @@ window.openWizard = function(target) {
         btn.classList.remove('selected');
     });
 
-    // 最初のステップ（ステップ1）を表示する
+    // 最初のステップを表示する
     document.querySelectorAll('.wizard-step').forEach(step => {
         step.classList.add('hidden');
         step.classList.remove('active');
     });
-    document.getElementById('step-1').classList.remove('hidden');
-    document.getElementById('step-1').classList.add('active');
+    document.getElementById('step-2').classList.remove('hidden');
+    document.getElementById('step-2').classList.add('active');
 
     // モーダルを表示
     document.getElementById('wizard-modal').classList.remove('hidden');
@@ -70,12 +70,10 @@ document.querySelectorAll('.next-btn').forEach(btn => {
 
         // 確認画面（ステップ5）に進む直前に、入力された内容を画面に反映させる
         if (nextStepNum === "5") {
-            const nickname = document.getElementById('input-nickname').value || "（なまえなし）";
             const creature = window.wizardData.creature || "（えらんでないよ）";
             const comment = document.getElementById('input-comment').value || "（コメントなし）";
 
             // HTMLの確認用スパンテキストを書き換える
-            document.getElementById('confirm-nickname').innerText = nickname;
             document.getElementById('confirm-creature').innerText = creature;
             document.getElementById('confirm-comment').innerText = comment;
 
@@ -177,7 +175,7 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
 
     try {
         const formData = new FormData();
-        formData.append('nickname', document.getElementById('input-nickname').value);
+        formData.append('nickname', '');
         formData.append('creature', window.wizardData.creature);
         formData.append('comment', document.getElementById('input-comment').value);
 

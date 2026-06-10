@@ -312,7 +312,7 @@ function renderImageTile(label, imageUrl, emptyText) {
 
 function renderPostCard(posts, postIndex, groupId, detId) {
     const post = posts[postIndex];
-    const userImgHtml = renderImageBlock('かいた え・しゃしん', post.image_url);
+    const userImgHtml = renderImageBlock('かいた絵', post.image_url);
     const conceptImgHtml = renderImageBlock('考えた図', post.concept_image_url);
 
     return `
@@ -323,7 +323,6 @@ function renderPostCard(posts, postIndex, groupId, detId) {
                 <button ${postIndex === posts.length - 1 ? 'disabled' : ''} onclick="window.changePost(event, '${groupId}', '${detId}', ${postIndex + 1})" style="padding:5px 15px; background:#fbc02d; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">＞</button>
             </div>
             <div style="font-size:1em; line-height:1.6; color:#333;">
-                <b>なまえ:</b> ${escapeHtml(post.nickname)}<br>
                 <b>いきもの:</b> ${escapeHtml(post.creature)}<br>
                 <b>コメント:</b> ${escapeHtml(post.comment)}
                 ${userImgHtml}
@@ -368,10 +367,9 @@ function renderFreePostHTML(post) {
             <span style="font-size: 0.9em; color: #666;">地図でえらんだ場所のとうこうです</span><br>
             <div style="background:#f3e5f5; padding:15px; border-radius:8px; border:1px solid #ce93d8; margin-top:15px;">
                 <div style="font-size:1em; line-height:1.6; color:#333;">
-                    <b>なまえ:</b> ${escapeHtml(post.nickname)}<br>
                     <b>いきもの:</b> ${escapeHtml(post.creature)}<br>
                     <b>コメント:</b> ${escapeHtml(post.comment)}
-                    ${renderImageBlock('かいた え・しゃしん', post.image_url)}
+                    ${renderImageBlock('かいた絵', post.image_url)}
                     ${renderImageBlock('考えた図', post.concept_image_url)}
                 </div>
             </div>
