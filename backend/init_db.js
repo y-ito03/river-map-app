@@ -41,7 +41,8 @@ async function setupDatabase() {
             creature TEXT,
             comment TEXT,
             image_url TEXT,
-            concept_image_url TEXT
+            concept_image_url TEXT,
+            hidden INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS free_posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,7 +53,8 @@ async function setupDatabase() {
             creature TEXT,
             comment TEXT,
             image_url TEXT,
-            concept_image_url TEXT
+            concept_image_url TEXT,
+            hidden INTEGER DEFAULT 0
         );
     `);
 

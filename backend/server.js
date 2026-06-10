@@ -9,6 +9,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 8000;
 const ACCESS_CODE = process.env.ACCESS_CODE || '';
+const ADMIN_CODE = process.env.ADMIN_CODE || ACCESS_CODE;
 const mediaDir = path.join(__dirname, 'media');
 const uploadDir = path.join(mediaDir, 'uploads');
 const databaseFile = path.join(__dirname, 'database.sqlite');
@@ -17,6 +18,10 @@ app.use(express.json());
 
 function getAccessCode(req) {
     return req.get('X-Access-Code') || req.query.access || '';
+}
+
+function getAdminCode(req) {
+    return req.get('X-Admin-Code') || req.query.admin || '';
 }
 
 function requireAccess(req, res, next) {
@@ -28,8 +33,19 @@ function requireAccess(req, res, next) {
     res.status(401).json({ error: "アクセスコードが正しくありません" });
 }
 
+function requireAdmin(req, res, next) {
+    if (!ADMIN_CODE || getAdminCode(req) === ADMIN_CODE) {
+        next();
+        return;
+    }
+
+    res.status(401).json({ error: "管理用コードが正しくありません" });
+}
+
 app.use('/media', (req, res, next) => {
-    if (ACCESS_CODE && getAccessCode(req) !== ACCESS_CODE) {
+    const hasAccess = ACCESS_CODE && getAccessCode(req) === ACCESS_CODE;
+    const hasAdmin = ADMIN_CODE && getAdminCode(req) === ADMIN_CODE;
+    if ((ACCESS_CODE || ADMIN_CODE) && !hasAccess && !hasAdmin) {
         return res.status(401).json({ error: "アクセスコードが正しくありません" });
     }
 
@@ -72,6 +88,10 @@ app.get('/api/access-check', requireAccess, (req, res) => {
     res.json({ status: "ok" });
 });
 
+app.get('/api/admin/check', requireAdmin, (req, res) => {
+    res.json({ status: "ok" });
+});
+
 // ① 全データを取得する窓口
 app.get('/api/surveys', requireAccess, async (req, res) => {
     console.log("【受信】フロントエンドからデータ取得リクエストが来ました");
@@ -87,7 +107,10 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
             const detections = await db.all("SELECT * FROM detections WHERE group_id = ?", group.id);
             for (const det of detections) {
                 // image_url も一緒に取得するように追加
-                const posts = await db.all("SELECT nickname, creature, comment, image_url, concept_image_url FROM user_posts WHERE detection_id = ?", det.id);
+                const posts = await db.all(
+                    "SELECT nickname, creature, comment, image_url, concept_image_url FROM user_posts WHERE detection_id = ? AND COALESCE(hidden, 0) = 0",
+                    det.id
+                );
                 groupsData[group.id].detections.push({
                     id: det.id,
                     lat: det.lat,
@@ -99,7 +122,7 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
                 });
             }
         }
-        const freePosts = await db.all("SELECT id, lat, lng, class_number, nickname, creature, comment, image_url, concept_image_url FROM free_posts ORDER BY id ASC");
+        const freePosts = await db.all("SELECT id, lat, lng, class_number, nickname, creature, comment, image_url, concept_image_url FROM free_posts WHERE COALESCE(hidden, 0) = 0 ORDER BY id ASC");
         res.json({ groups: groupsData, free_posts: freePosts });
     } catch (err) {
         console.error("データベースエラー:", err);
@@ -164,6 +187,130 @@ app.post('/api/free-posts', requireAccess, postUpload, async (req, res) => {
     }
 });
 
+function getPostTable(type) {
+    if (type === 'detection') return 'user_posts';
+    if (type === 'free') return 'free_posts';
+    return null;
+}
+
+async function getAdminPosts() {
+    const detectionPosts = await db.all(`
+        SELECT
+            'detection' AS type,
+            p.id,
+            p.detection_id,
+            p.nickname,
+            p.creature,
+            p.comment,
+            p.image_url,
+            p.concept_image_url,
+            COALESCE(p.hidden, 0) AS hidden,
+            d.class_name AS detection_class,
+            d.lat,
+            d.lng,
+            d.thumbnail_path,
+            g.name AS group_name
+        FROM user_posts p
+        LEFT JOIN detections d ON d.id = p.detection_id
+        LEFT JOIN groups g ON g.id = d.group_id
+        ORDER BY p.id DESC
+    `);
+
+    const freePosts = await db.all(`
+        SELECT
+            'free' AS type,
+            id,
+            NULL AS detection_id,
+            nickname,
+            creature,
+            comment,
+            image_url,
+            concept_image_url,
+            COALESCE(hidden, 0) AS hidden,
+            NULL AS detection_class,
+            lat,
+            lng,
+            NULL AS thumbnail_path,
+            class_number,
+            NULL AS group_name
+        FROM free_posts
+        ORDER BY id DESC
+    `);
+
+    return [...detectionPosts, ...freePosts].sort((a, b) => b.id - a.id);
+}
+
+app.get('/api/admin/posts', requireAdmin, async (req, res) => {
+    try {
+        const posts = await getAdminPosts();
+        res.json({ posts });
+    } catch (err) {
+        console.error("管理用投稿一覧の取得エラー:", err);
+        res.status(500).json({ error: "投稿一覧の取得に失敗しました" });
+    }
+});
+
+app.patch('/api/admin/posts/:type/:id', requireAdmin, async (req, res) => {
+    const table = getPostTable(req.params.type);
+    if (!table) {
+        return res.status(400).json({ error: "投稿の種類が正しくありません" });
+    }
+
+    const id = Number(req.params.id);
+    const hidden = req.body.hidden ? 1 : 0;
+
+    try {
+        const result = await db.run(`UPDATE ${table} SET hidden = ? WHERE id = ?`, [hidden, id]);
+        if (result.changes === 0) {
+            return res.status(404).json({ error: "投稿が見つかりません" });
+        }
+        res.json({ status: "success", hidden });
+    } catch (err) {
+        console.error("投稿の表示状態更新エラー:", err);
+        res.status(500).json({ error: "投稿の更新に失敗しました" });
+    }
+});
+
+async function deleteUploadFile(relativePath) {
+    if (!relativePath) return;
+
+    const filePath = path.resolve(mediaDir, relativePath);
+    if (!filePath.startsWith(uploadDir + path.sep)) return;
+
+    try {
+        await fs.promises.unlink(filePath);
+    } catch (err) {
+        if (err.code !== 'ENOENT') {
+            console.warn("画像ファイルの削除に失敗しました:", filePath, err.message);
+        }
+    }
+}
+
+app.delete('/api/admin/posts/:type/:id', requireAdmin, async (req, res) => {
+    const table = getPostTable(req.params.type);
+    if (!table) {
+        return res.status(400).json({ error: "投稿の種類が正しくありません" });
+    }
+
+    const id = Number(req.params.id);
+
+    try {
+        const post = await db.get(`SELECT id, image_url, concept_image_url FROM ${table} WHERE id = ?`, id);
+        if (!post) {
+            return res.status(404).json({ error: "投稿が見つかりません" });
+        }
+
+        await db.run(`DELETE FROM ${table} WHERE id = ?`, id);
+        await deleteUploadFile(post.image_url);
+        await deleteUploadFile(post.concept_image_url);
+
+        res.json({ status: "success" });
+    } catch (err) {
+        console.error("投稿削除エラー:", err);
+        res.status(500).json({ error: "投稿の削除に失敗しました" });
+    }
+});
+
 async function addColumnIfMissing(tableName, columnName, columnDefinition) {
     const columns = await db.all(`PRAGMA table_info(${tableName})`);
     if (!columns.some((column) => column.name === columnName)) {
@@ -180,7 +327,8 @@ async function ensureSchema() {
             creature TEXT,
             comment TEXT,
             image_url TEXT,
-            concept_image_url TEXT
+            concept_image_url TEXT,
+            hidden INTEGER DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS free_posts (
@@ -192,12 +340,15 @@ async function ensureSchema() {
             creature TEXT,
             comment TEXT,
             image_url TEXT,
-            concept_image_url TEXT
+            concept_image_url TEXT,
+            hidden INTEGER DEFAULT 0
         );
     `);
     await addColumnIfMissing('user_posts', 'concept_image_url', 'TEXT');
+    await addColumnIfMissing('user_posts', 'hidden', 'INTEGER DEFAULT 0');
     await addColumnIfMissing('free_posts', 'class_number', 'INTEGER');
     await addColumnIfMissing('free_posts', 'concept_image_url', 'TEXT');
+    await addColumnIfMissing('free_posts', 'hidden', 'INTEGER DEFAULT 0');
 }
 
 async function startServer() {
@@ -208,6 +359,9 @@ async function startServer() {
         console.log(`バックエンドサーバーが起動しました: http://localhost:${PORT}`);
         if (ACCESS_CODE) {
             console.log("アクセスコード保護が有効です");
+        }
+        if (ADMIN_CODE) {
+            console.log("管理画面保護が有効です");
         }
     });
 }

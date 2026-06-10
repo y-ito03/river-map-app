@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>岩倉川の調査記録 管理画面</title>
+</head>
+<body>
+  <div id="admin-app">
+    <header class="admin-header">
+      <div>
+        <h1>投稿管理</h1>
+        <p>岩倉川の調査記録</p>
+      </div>
+      <button id="logout-btn" class="secondary-btn hidden">コードを消す</button>
+    </header>
+
+    <main class="admin-main">
+      <section id="login-panel" class="admin-panel">
+        <h2>管理用コード</h2>
+        <p>先生用の管理コードを入力してください。</p>
+        <div class="login-row">
+          <input id="admin-code-input" type="password" autocomplete="current-password" placeholder="管理用コード">
+          <button id="save-code-btn">入る</button>
+        </div>
+        <p id="login-message" class="message"></p>
+      </section>
+
+      <section id="posts-panel" class="hidden">
+        <div class="toolbar">
+          <div class="filter-group">
+            <select id="status-filter" aria-label="表示状態">
+              <option value="all">すべて</option>
+              <option value="visible">表示中</option>
+              <option value="hidden">非表示</option>
+            </select>
+            <select id="type-filter" aria-label="投稿の種類">
+              <option value="all">すべての投稿</option>
+              <option value="detection">ピンへの投稿</option>
+              <option value="free">えらんだ場所の投稿</option>
+            </select>
+          </div>
+          <button id="reload-btn">再読み込み</button>
+        </div>
+
+        <p id="summary-text" class="summary-text"></p>
+        <div id="posts-list" class="posts-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/admin.js"></script>
+</body>
+</html>
