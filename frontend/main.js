@@ -306,7 +306,6 @@ function renderImageTile(label, imageUrl, emptyText) {
     return `
         <button type="button" class="image-preview-tile image-thumb-button" data-full-image="${safeImageUrl}" data-image-label="${escapeHtml(label)}">
             <img src="${safeImageUrl}" alt="${escapeHtml(label)}">
-            <span>${escapeHtml(label)}</span>
         </button>
     `;
 }
