@@ -160,6 +160,15 @@ coachmarkOverlay.innerHTML = `
 `;
 document.getElementById('app').appendChild(coachmarkOverlay);
 
+const imageLightbox = document.createElement('div');
+imageLightbox.id = 'image-lightbox';
+imageLightbox.className = 'image-lightbox hidden';
+imageLightbox.innerHTML = `
+    <button id="image-lightbox-close" class="image-lightbox-close" aria-label="画像をとじる">×</button>
+    <img id="image-lightbox-img" class="image-lightbox-img" alt="">
+`;
+document.getElementById('app').appendChild(imageLightbox);
+
 function parseGroupInfo(groupName) {
     const name = String(groupName || '');
     const japaneseMatch = name.match(/(\d+)\s*組.*?(\d+)\s*班/);
@@ -277,9 +286,28 @@ function setFreePostMode(enabled) {
 
 function renderImageBlock(label, imageUrl) {
     if (!imageUrl) return '';
+    const fullImageUrl = toMediaPath(imageUrl);
+    const safeImageUrl = escapeHtml(fullImageUrl);
     return `
         <span class="post-image-label">${escapeHtml(label)}</span>
-        <img src="${toMediaPath(imageUrl)}" class="post-image" alt="${escapeHtml(label)}">
+        <button type="button" class="image-thumb-button" data-full-image="${safeImageUrl}" data-image-label="${escapeHtml(label)}">
+            <img src="${safeImageUrl}" class="post-image" alt="${escapeHtml(label)}">
+        </button>
+    `;
+}
+
+function renderImageTile(label, imageUrl, emptyText) {
+    if (!imageUrl) {
+        return `<div class="image-preview-tile image-preview-empty">${escapeHtml(emptyText)}</div>`;
+    }
+
+    const fullImageUrl = toMediaPath(imageUrl);
+    const safeImageUrl = escapeHtml(fullImageUrl);
+    return `
+        <button type="button" class="image-preview-tile image-thumb-button" data-full-image="${safeImageUrl}" data-image-label="${escapeHtml(label)}">
+            <img src="${safeImageUrl}" alt="${escapeHtml(label)}">
+            <span>${escapeHtml(label)}</span>
+        </button>
     `;
 }
 
@@ -309,18 +337,14 @@ function renderPostCard(posts, postIndex, groupId, detId) {
 // --- サイドパネルに表示するHTMLを作る関数 ---
 window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
     const det = surveyData[groupId].detections.find(d => d.id === detId);
-    const thumbUrl = toMediaPath(det.thumbnail_url);
 
     let html = `
         <div>
             <b style="font-size: 1.4em; color: #333;">${escapeHtml(det.class_name)}</b><br>
-            <span style="font-size: 0.9em; color: #666;">見つけた時間: ${escapeHtml(det.timestamp)}秒</span><br>
             
-            <div style="display:flex; gap:10px; margin-top:15px; margin-bottom:15px;">
-                <div style="flex:1; background:#eee; height:100px; text-align:center; border-radius:8px; overflow:hidden;">
-                    ${thumbUrl ? `<img src="${thumbUrl}" style="width:100%; height:100%; object-fit:cover;" alt="AI画像">` : '<span style="line-height:100px; color:#555; font-size:0.8em;">画像なし</span>'}
-                </div>
-                <div style="flex:1; background:#ddd; height:100px; text-align:center; font-size:0.8em; line-height:100px; color:#555; border-radius:8px;">水中画像</div>
+            <div class="detail-image-grid">
+                ${renderImageTile('地上画像', det.thumbnail_url, '画像なし')}
+                <div class="image-preview-tile image-preview-empty">水中画像</div>
             </div>
             
             <button onclick="window.openWizard('${det.id}')" style="margin-bottom:20px; padding:12px 15px; background:#4CAF50; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; width:100%; font-size: 1.1em;">
@@ -657,8 +681,15 @@ function showTutorial(force = false) {
     renderCoachmarkStep();
 }
 
-document.getElementById('coachmark-skip').addEventListener('click', finishTutorial);
-document.getElementById('coachmark-next').addEventListener('click', () => {
+coachmarkOverlay.addEventListener('click', (event) => {
+    event.stopPropagation();
+});
+document.getElementById('coachmark-skip').addEventListener('click', (event) => {
+    event.stopPropagation();
+    finishTutorial();
+});
+document.getElementById('coachmark-next').addEventListener('click', (event) => {
+    event.stopPropagation();
     coachmarkIndex += 1;
     renderCoachmarkStep();
 });
@@ -809,6 +840,39 @@ async function initApp() {
 }
 initApp();
 
+function openImageLightbox(imageUrl, label) {
+    const img = document.getElementById('image-lightbox-img');
+    img.src = imageUrl;
+    img.alt = label || '画像';
+    imageLightbox.classList.remove('hidden');
+}
+
+function closeImageLightbox() {
+    imageLightbox.classList.add('hidden');
+    document.getElementById('image-lightbox-img').src = '';
+}
+
+document.addEventListener('click', (event) => {
+    const imageButton = event.target.closest('.image-thumb-button');
+    if (!imageButton) return;
+
+    event.stopPropagation();
+    openImageLightbox(imageButton.dataset.fullImage, imageButton.dataset.imageLabel);
+});
+document.getElementById('image-lightbox-close').addEventListener('click', (event) => {
+    event.stopPropagation();
+    closeImageLightbox();
+});
+imageLightbox.addEventListener('click', closeImageLightbox);
+document.getElementById('image-lightbox-img').addEventListener('click', (event) => {
+    event.stopPropagation();
+});
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !imageLightbox.classList.contains('hidden')) {
+        closeImageLightbox();
+    }
+});
+
 // ハンバーガーメニューの開閉
 const menuBtn = document.getElementById('menu-btn');
 const sidebar = document.getElementById('sidebar');
@@ -820,6 +884,7 @@ sidebar.addEventListener('click', (event) => {
     event.stopPropagation();
 });
 document.addEventListener('click', () => {
+    if (!coachmarkOverlay.classList.contains('hidden')) return;
     if (!sidebar.classList.contains('hidden')) {
         sidebar.classList.add('hidden');
     }
