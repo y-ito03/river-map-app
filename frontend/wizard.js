@@ -6,6 +6,7 @@ window.wizardData = {
     targetType: "detection",
     lat: null,
     lng: null,
+    classNumber: null,
     creature: ""
 };
 
@@ -16,13 +17,15 @@ window.openWizard = function(target) {
         window.wizardData.targetMarkerId = null;
         window.wizardData.lat = target.lat;
         window.wizardData.lng = target.lng;
-        document.getElementById('wizard-target-label').innerText = "好きな場所への投稿";
+        window.wizardData.classNumber = target.classNumber || null;
+        document.getElementById('wizard-target-label').innerText = "えらんだ場所に とうこう";
     } else {
         window.wizardData.targetType = "detection";
         window.wizardData.targetMarkerId = target;
         window.wizardData.lat = null;
         window.wizardData.lng = null;
-        document.getElementById('wizard-target-label').innerText = "検出ポイントへの投稿";
+        window.wizardData.classNumber = null;
+        document.getElementById('wizard-target-label').innerText = "ピンの場所に とうこう";
     }
     window.wizardData.creature = ""; // 生き物の選択をリセット
     
@@ -192,6 +195,9 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
         if (window.wizardData.targetType === "free") {
             formData.append('lat', window.wizardData.lat);
             formData.append('lng', window.wizardData.lng);
+            if (window.wizardData.classNumber) {
+                formData.append('classNumber', window.wizardData.classNumber);
+            }
             endpoint = '/api/free-posts';
         } else {
             endpoint = `/api/detections/${window.wizardData.targetMarkerId}/posts`;

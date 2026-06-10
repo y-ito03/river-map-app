@@ -139,7 +139,7 @@ document.getElementById('app').appendChild(legendPanel);
 const freePostBanner = document.createElement('div');
 freePostBanner.id = 'free-post-banner';
 freePostBanner.className = 'free-post-banner hidden';
-freePostBanner.innerText = '地図をタップして、投稿する場所をえらんでください';
+freePostBanner.innerText = '地図をタップして、とうこうする場所をえらんでね';
 document.getElementById('app').appendChild(freePostBanner);
 
 const coachmarkOverlay = document.createElement('div');
@@ -212,6 +212,23 @@ function groupMatchesClass(groupName, classFilter) {
     return parseGroupInfo(groupName).classNumber === Number(classFilter);
 }
 
+function freePostMatchesClass(post, classFilter) {
+    if (classFilter === 'all') return true;
+    return Number(post.class_number) === Number(classFilter);
+}
+
+function getCurrentFreePostClassNumber() {
+    if (currentGroupId && surveyData[currentGroupId]) {
+        return parseGroupInfo(surveyData[currentGroupId].name).classNumber;
+    }
+
+    if (currentGroupId === 'all-tracks' && allTracksClassFilter !== 'all') {
+        return Number(allTracksClassFilter);
+    }
+
+    return null;
+}
+
 function createMarkerIcon(type) {
     return L.divIcon({
         className: '',
@@ -269,13 +286,13 @@ function renderImageBlock(label, imageUrl) {
 function renderPostCard(posts, postIndex, groupId, detId) {
     const post = posts[postIndex];
     const userImgHtml = renderImageBlock('かいた え・しゃしん', post.image_url);
-    const conceptImgHtml = renderImageBlock('概念図', post.concept_image_url);
+    const conceptImgHtml = renderImageBlock('考えた図', post.concept_image_url);
 
     return `
         <div style="background:#fff9c4; padding:15px; border-radius:8px; border:1px solid #fbc02d;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <button ${postIndex === 0 ? 'disabled' : ''} onclick="window.changePost(event, '${groupId}', '${detId}', ${postIndex - 1})" style="padding:5px 15px; background:#fbc02d; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">＜</button>
-                <span style="font-weight:bold; font-size:0.9em; color:#333;">${posts.length}けん中の${postIndex + 1}けんばん</span>
+                <span style="font-weight:bold; font-size:0.9em; color:#333;">${posts.length}けん中 ${postIndex + 1}けん目</span>
                 <button ${postIndex === posts.length - 1 ? 'disabled' : ''} onclick="window.changePost(event, '${groupId}', '${detId}', ${postIndex + 1})" style="padding:5px 15px; background:#fbc02d; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">＞</button>
             </div>
             <div style="font-size:1em; line-height:1.6; color:#333;">
@@ -297,11 +314,11 @@ window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
     let html = `
         <div>
             <b style="font-size: 1.4em; color: #333;">${escapeHtml(det.class_name)}</b><br>
-            <span style="font-size: 0.9em; color: #666;">検出: ${escapeHtml(det.timestamp)}秒</span><br>
+            <span style="font-size: 0.9em; color: #666;">見つけた時間: ${escapeHtml(det.timestamp)}秒</span><br>
             
             <div style="display:flex; gap:10px; margin-top:15px; margin-bottom:15px;">
                 <div style="flex:1; background:#eee; height:100px; text-align:center; border-radius:8px; overflow:hidden;">
-                    ${thumbUrl ? `<img src="${thumbUrl}" style="width:100%; height:100%; object-fit:cover;" alt="AI画像">` : '<span style="line-height:100px; color:#555; font-size:0.8em;">地上画像なし</span>'}
+                    ${thumbUrl ? `<img src="${thumbUrl}" style="width:100%; height:100%; object-fit:cover;" alt="AI画像">` : '<span style="line-height:100px; color:#555; font-size:0.8em;">画像なし</span>'}
                 </div>
                 <div style="flex:1; background:#ddd; height:100px; text-align:center; font-size:0.8em; line-height:100px; color:#555; border-radius:8px;">水中画像</div>
             </div>
@@ -314,7 +331,7 @@ window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
     if (det.user_posts && det.user_posts.length > 0) {
         html += renderPostCard(det.user_posts, postIndex, groupId, detId);
     } else {
-        html += `<p style="color:#666; text-align:center; margin-top:20px;">まだみんなのとうろくはありません。</p>`;
+        html += `<p style="color:#666; text-align:center; margin-top:20px;">まだとうこうはありません。</p>`;
     }
 
     html += `</div>`;
@@ -324,15 +341,15 @@ window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
 function renderFreePostHTML(post) {
     return `
         <div>
-            <b style="font-size: 1.4em; color: #333;">自由投稿</b><br>
-            <span style="font-size: 0.9em; color: #666;">好きな場所に登録された投稿です</span><br>
+            <b style="font-size: 1.4em; color: #333;">えらんだ場所のとうこう</b><br>
+            <span style="font-size: 0.9em; color: #666;">地図でえらんだ場所のとうこうです</span><br>
             <div style="background:#f3e5f5; padding:15px; border-radius:8px; border:1px solid #ce93d8; margin-top:15px;">
                 <div style="font-size:1em; line-height:1.6; color:#333;">
                     <b>なまえ:</b> ${escapeHtml(post.nickname)}<br>
                     <b>いきもの:</b> ${escapeHtml(post.creature)}<br>
                     <b>コメント:</b> ${escapeHtml(post.comment)}
                     ${renderImageBlock('かいた え・しゃしん', post.image_url)}
-                    ${renderImageBlock('概念図', post.concept_image_url)}
+                    ${renderImageBlock('考えた図', post.concept_image_url)}
                 </div>
             </div>
         </div>
@@ -381,8 +398,9 @@ function clearMap() {
     legendPanel.classList.add('hidden');
 }
 
-function renderFreePostMarkers() {
+function renderFreePostMarkers(classFilter = 'all') {
     freePosts.forEach(post => {
+        if (!freePostMatchesClass(post, classFilter)) return;
         const marker = L.marker([post.lat, post.lng], { icon: createSpeciesMarkerIcon(post.creature) }).addTo(map);
         marker.on('click', () => openFreePostPanel(post.id));
         currentMarkers.push(marker);
@@ -431,7 +449,8 @@ function renderGroupData(groupId) {
         });
     }
 
-    renderFreePostMarkers();
+    const { classNumber } = parseGroupInfo(data.name);
+    renderFreePostMarkers(String(classNumber));
     map.fitBounds(imageBounds);
 }
 
@@ -441,8 +460,8 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
     allTracksClassFilter = classFilter;
     clearMap();
     document.querySelector('.title').innerText = classFilter === 'all'
-        ? `${APP_TITLE} - 全班の軌跡`
-        : `${APP_TITLE} - ${classNames[classFilter]}の軌跡`;
+        ? `${APP_TITLE} - ぜんぶの班の道`
+        : `${APP_TITLE} - ${classNames[classFilter]}の道`;
 
     const legendItems = [];
     Object.entries(surveyData).forEach(([groupId, group]) => {
@@ -466,16 +485,16 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
     });
 
     renderPostedDetectionMarkers(classFilter);
-    renderFreePostMarkers();
+    renderFreePostMarkers(classFilter);
     legendPanel.innerHTML = `
-        <h3>凡例</h3>
-        <select id="track-class-filter" class="track-filter" aria-label="表示する組">
-            <option value="all" ${classFilter === 'all' ? 'selected' : ''}>すべての組</option>
+        <h3>色と線の見方</h3>
+        <select id="track-class-filter" class="track-filter" aria-label="表示するクラス">
+            <option value="all" ${classFilter === 'all' ? 'selected' : ''}>すべてのクラス</option>
             <option value="1" ${classFilter === '1' ? 'selected' : ''}>Davisだけ</option>
             <option value="2" ${classFilter === '2' ? 'selected' : ''}>Hardyだけ</option>
             <option value="3" ${classFilter === '3' ? 'selected' : ''}>Learnedだけ</option>
         </select>
-        ${legendItems.length > 0 ? legendItems.join('') : '<p style="margin:0; color:#666;">表示できる軌跡がありません。</p>'}
+        ${legendItems.length > 0 ? legendItems.join('') : '<p style="margin:0; color:#666;">表示できる道がありません。</p>'}
     `;
     legendPanel.classList.remove('hidden');
     document.getElementById('track-class-filter').addEventListener('change', (event) => {
@@ -507,7 +526,7 @@ function renderHeatmap() {
     setFreePostMode(false);
     clearMap();
     currentGroupId = "heatmap";
-    document.querySelector('.title').innerText = `${APP_TITLE} - ヒートマップモード`;
+    document.querySelector('.title').innerText = `${APP_TITLE} - 多く見つかった場所`;
 
     let creatureCounts = {};
     Object.values(surveyData).forEach(group => {
@@ -548,31 +567,31 @@ const coachmarkSteps = [
     {
         selector: '#menu-btn',
         title: 'メニュー',
-        body: 'ここから班の記録、全班の軌跡、ヒートマップ、好きな場所への投稿を選びます。',
+        body: 'ここから、班の記録や、ぜんぶの班の道を見ることができます。',
         before: () => document.getElementById('sidebar').classList.add('hidden')
     },
     {
         selector: '#btn-all-tracks',
-        title: '全班の軌跡',
-        body: 'すべての班の移動軌跡を重ねて表示します。表示中に凡例のメニューからDavis、Hardy、Learnedを選べます。',
+        title: 'ぜんぶの班の道',
+        body: 'ぜんぶの班が歩いた道を、まとめて見ることができます。Davis、Hardy、Learnedだけをえらぶこともできます。',
         before: () => document.getElementById('sidebar').classList.remove('hidden')
     },
     {
         selector: '#btn-free-post',
         title: '好きな場所に投稿',
-        body: 'このボタンを押してから地図をタップすると、検出ポイント以外の好きな場所にも投稿できます。',
+        body: 'このボタンを押してから地図をタップすると、自分でえらんだ場所にとうこうできます。',
         before: () => document.getElementById('sidebar').classList.remove('hidden')
     },
     {
         selector: '#map',
         title: '地図',
-        body: 'ピンを押すと、その場所の画像や投稿が見られます。投稿がある場所は生物アイコンで表示されます。',
+        body: 'ピンを押すと、その場所の画像や、みんなのとうこうが見られます。とうこうがある場所は、いきものの絵になります。',
         before: () => document.getElementById('sidebar').classList.add('hidden')
     },
     {
         selector: '#btn-heatmap',
-        title: 'ヒートマップ',
-        body: '見つかったいきものが多い場所を色の濃さで確認できます。',
+        title: '多く見つかった場所',
+        body: 'いきものが多く見つかった場所を、色で見ることができます。',
         before: () => document.getElementById('sidebar').classList.remove('hidden')
     }
 ];
@@ -674,7 +693,7 @@ function updateSidebarMenu() {
     const btnAllTracks = document.createElement('button');
     btnAllTracks.id = 'btn-all-tracks';
     btnAllTracks.className = 'nav-btn';
-    btnAllTracks.innerText = '全班の軌跡を表示';
+    btnAllTracks.innerText = 'ぜんぶの班の道を見る';
     btnAllTracks.addEventListener('click', () => {
         renderAllTracks();
         document.getElementById('sidebar').classList.add('hidden');
@@ -686,7 +705,7 @@ function updateSidebarMenu() {
     const btnFreePost = document.createElement('button');
     btnFreePost.id = 'btn-free-post';
     btnFreePost.className = 'nav-btn';
-    btnFreePost.innerText = '好きな場所に投稿する';
+    btnFreePost.innerText = '好きな場所にとうこうする';
     btnFreePost.addEventListener('click', () => {
         setFreePostMode(true);
         document.getElementById('sidebar').classList.add('hidden');
@@ -698,7 +717,7 @@ function updateSidebarMenu() {
     const btnHeat = document.createElement('button');
     btnHeat.id = 'btn-heatmap';
     btnHeat.className = 'nav-btn';
-    btnHeat.innerText = 'ヒートマップモード';
+    btnHeat.innerText = '多く見つかった場所を見る';
     btnHeat.addEventListener('click', () => {
         renderHeatmap();
         document.getElementById('sidebar').classList.add('hidden');
@@ -721,11 +740,11 @@ function updateSidebarMenu() {
     const btnReload = document.createElement('button');
     btnReload.id = 'btn-reload';
     btnReload.className = 'nav-btn';
-    btnReload.innerText = '最新状態にする';
+    btnReload.innerText = '新しくする';
     btnReload.addEventListener('click', async () => {
         document.getElementById('sidebar').classList.add('hidden');
         await loadSurveyData();
-        alert("最新のデータをサーバーから再取得しました！");
+        alert("新しいデータを読みこみました！");
         rerenderCurrentView();
     });
     liReload.appendChild(btnReload);
@@ -768,14 +787,15 @@ map.on('click', (event) => {
     if (!freePostMode) return;
 
     if (!allowedBounds.contains(event.latlng)) {
-        alert("投稿できる場所は川マップの範囲内だけです。");
+        alert("とうこうできるのは、地図の中だけです。");
         return;
     }
 
     window.openWizard({
         type: 'free',
         lat: event.latlng.lat,
-        lng: event.latlng.lng
+        lng: event.latlng.lng,
+        classNumber: getCurrentFreePostClassNumber()
     });
 });
 
@@ -792,4 +812,15 @@ initApp();
 // ハンバーガーメニューの開閉
 const menuBtn = document.getElementById('menu-btn');
 const sidebar = document.getElementById('sidebar');
-menuBtn.addEventListener('click', () => { sidebar.classList.toggle('hidden'); });
+menuBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    sidebar.classList.toggle('hidden');
+});
+sidebar.addEventListener('click', (event) => {
+    event.stopPropagation();
+});
+document.addEventListener('click', () => {
+    if (!sidebar.classList.contains('hidden')) {
+        sidebar.classList.add('hidden');
+    }
+});

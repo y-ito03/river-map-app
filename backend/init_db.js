@@ -47,6 +47,7 @@ async function setupDatabase() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             lat REAL,
             lng REAL,
+            class_number INTEGER,
             nickname TEXT,
             creature TEXT,
             comment TEXT,

@@ -99,7 +99,7 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
                 });
             }
         }
-        const freePosts = await db.all("SELECT id, lat, lng, nickname, creature, comment, image_url, concept_image_url FROM free_posts ORDER BY id ASC");
+        const freePosts = await db.all("SELECT id, lat, lng, class_number, nickname, creature, comment, image_url, concept_image_url FROM free_posts ORDER BY id ASC");
         res.json({ groups: groupsData, free_posts: freePosts });
     } catch (err) {
         console.error("データベースエラー:", err);
@@ -140,6 +140,7 @@ app.post('/api/free-posts', requireAccess, postUpload, async (req, res) => {
     const postData = req.body;
     const lat = parseFloat(postData.lat);
     const lng = parseFloat(postData.lng);
+    const classNumber = postData.classNumber ? parseInt(postData.classNumber, 10) : null;
     const imageFile = req.files?.image?.[0];
     const conceptFile = req.files?.conceptImage?.[0];
 
@@ -152,9 +153,9 @@ app.post('/api/free-posts', requireAccess, postUpload, async (req, res) => {
 
     try {
         await db.run(
-            `INSERT INTO free_posts (lat, lng, nickname, creature, comment, image_url, concept_image_url)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [lat, lng, postData.nickname, postData.creature, postData.comment, imageUrl, conceptImageUrl]
+            `INSERT INTO free_posts (lat, lng, class_number, nickname, creature, comment, image_url, concept_image_url)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [lat, lng, Number.isNaN(classNumber) ? null : classNumber, postData.nickname, postData.creature, postData.comment, imageUrl, conceptImageUrl]
         );
         res.json({ status: "success", message: "自由投稿を保存しました！" });
     } catch (err) {
@@ -186,6 +187,7 @@ async function ensureSchema() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             lat REAL,
             lng REAL,
+            class_number INTEGER,
             nickname TEXT,
             creature TEXT,
             comment TEXT,
@@ -194,6 +196,8 @@ async function ensureSchema() {
         );
     `);
     await addColumnIfMissing('user_posts', 'concept_image_url', 'TEXT');
+    await addColumnIfMissing('free_posts', 'class_number', 'INTEGER');
+    await addColumnIfMissing('free_posts', 'concept_image_url', 'TEXT');
 }
 
 async function startServer() {

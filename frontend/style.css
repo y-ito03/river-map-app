@@ -118,11 +118,13 @@ body, html {
 .modal {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
   background-color: rgba(0,0,0,0.6); z-index: 3000; display: flex; justify-content: center; align-items: center;
+  overflow-y: auto; box-sizing: border-box; padding: 12px;
 }
 .modal.hidden { display: none; }
 .modal-content {
   background: white; width: 90%; max-width: 500px; border-radius: 12px; padding: 20px; position: relative;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2); box-sizing: border-box;
+  max-height: calc(100dvh - 24px); overflow-y: auto;
 }
 .close-btn { position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 1.2em; color: #666; cursor: pointer; }
 .wizard-step { display: none; text-align: center; }
@@ -174,4 +176,14 @@ body, html {
   .detail-panel { width: 100%; min-width: 0; position: absolute; right: 0; top: 0; bottom: 0; }
   .sidebar { width: 85%; }
   .legend-panel { left: 10px; right: 10px; bottom: 10px; max-height: 30vh; }
+  .modal { align-items: flex-start; }
+  .modal-content { width: 96%; padding: 16px; }
+  .large-input { width: 100%; box-sizing: border-box; }
+  .btn-area { gap: 10px; flex-wrap: wrap; }
+  #preview-image, #preview-concept-image { max-height: 130px !important; }
+  #confirm-image, #confirm-concept-image { max-height: 110px !important; }
+}
+
+@supports not (height: 100dvh) {
+  .modal-content { max-height: calc(100vh - 24px); }
 }

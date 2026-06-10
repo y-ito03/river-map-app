@@ -9,9 +9,9 @@
   <div id="app">
     <div id="access-gate" class="modal hidden">
       <div class="modal-content access-content">
-        <h2>アクセスできません</h2>
-        <p>このアプリは、配布されたQRコードからアクセスした人だけが使えます。</p>
-        <p>先生から配られたQRコードをもう一度読み取ってください。</p>
+        <h2>入れません</h2>
+        <p>このページは、先生からもらったQRコードで入ってください。</p>
+        <p>もう一度QRコードを読み取ってください。</p>
       </div>
     </div>
 
@@ -22,8 +22,8 @@
         <p id="wizard-target-label" class="wizard-target-label"></p>
         
         <div id="step-1" class="wizard-step active">
-          <h3>なまえ（ニックネーム）を おしえてね</h3>
-          <input type="text" id="input-nickname" class="large-input" placeholder="ニックネームを入力">
+          <h3>なまえを おしえてね</h3>
+          <input type="text" id="input-nickname" class="large-input" placeholder="なまえを入力">
           <div class="btn-area"><button class="next-btn" data-next="2">つぎへ</button></div>
         </div>
 
@@ -43,7 +43,7 @@
           <h3>かいた え や、しゃしん を えらんでね</h3>
           <input type="file" id="input-image" accept="image/*" class="large-input">
           <img id="preview-image" style="max-width: 100%; max-height: 200px; display: none; margin-top: 10px; border-radius: 8px;">
-          <h3>概念図があれば えらんでね</h3>
+          <h3>考えた図があれば えらんでね</h3>
           <input type="file" id="input-concept-image" accept="image/*" class="large-input">
           <img id="preview-concept-image" style="max-width: 100%; max-height: 200px; display: none; margin-top: 10px; border-radius: 8px;">
           <div class="btn-area">
@@ -53,7 +53,7 @@
         </div>
 
         <div id="step-4" class="wizard-step hidden">
-          <h3>コメントを かいてね（きづいたことなど）</h3>
+          <h3>気づいたことを かいてね</h3>
           <textarea id="input-comment" class="large-input" rows="4" placeholder="どんなところにいた？ なにをしていた？"></textarea>
           <div class="btn-area">
             <button class="prev-btn" data-prev="3">もどる</button>
@@ -69,7 +69,7 @@
             <p><b>コメント:</b> <span id="confirm-comment"></span></p>
             <p><b>かいた え・しゃしん:</b></p>
             <img id="confirm-image" style="max-width: 100%; max-height: 150px; border-radius: 8px;">
-            <p><b>概念図:</b></p>
+            <p><b>考えた図:</b></p>
             <img id="confirm-concept-image" style="max-width: 100%; max-height: 150px; border-radius: 8px;">
           </div>
           <div class="btn-area">
@@ -90,8 +90,8 @@
       <ul>
         <li><button class="nav-btn group-btn" data-group="group1">1班の記録</button></li>
         <li><button class="nav-btn group-btn" data-group="group2">2班の記録</button></li>
-        <li><button id="btn-heatmap" class="nav-btn">ヒートマップモード</button></li>
-        <li><button id="btn-reload" class="nav-btn">最新状態にする</button></li>
+        <li><button id="btn-heatmap" class="nav-btn">多く見つかった場所を見る</button></li>
+        <li><button id="btn-reload" class="nav-btn">新しくする</button></li>
       </ul>
     </nav>
 
@@ -102,18 +102,18 @@
       <!-- サイドパネル -->
       <aside id="detail-panel" class="detail-panel hidden">
         <div class="panel-header">
-          <h2 id="panel-title">ポイント詳細</h2>
-          <button id="close-panel" class="close-btn-panel">✖ 閉じる</button>
+          <h2 id="panel-title">ピンのくわしい情報</h2>
+          <button id="close-panel" class="close-btn-panel">✖ とじる</button>
         </div>
         <div id="panel-content" class="panel-content">
-          <p class="placeholder-text">ポイントを選択してください</p>
+          <p class="placeholder-text">ピンをえらんでください</p>
         </div>
       </aside>
     </div>
 
     <!-- ヒートマップモード用の集計パネル -->
     <div id="summary-panel" class="summary-panel hidden">
-      <h3> 生物数</h3>
+      <h3>いきものの数</h3>
       <!-- 【追加】絞り込み用のドロップダウン -->
       <select id="heatmap-filter" class="heatmap-filter"></select>
       <ul id="summary-list"></ul>
