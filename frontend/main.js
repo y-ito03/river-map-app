@@ -63,10 +63,12 @@ async function checkAccess() {
     return false;
 }
 
-// --- ベクター画像を表示する範囲（ご指定の座標） ---
+// --- 地図イラストを表示する範囲 ---
+// 新しい地図イラストは検出ポイントより少し西に見えるため、画像だけ東へ補正する。
+const MAP_IMAGE_LNG_OFFSET = 0.00006;
 const imageBounds = [
-    [35.0668688174732, 135.78416397658356], // 左上 (北西)
-    [35.06464445892178, 135.78518787088882]  // 右下 (南東)
+    [35.0668688174732, 135.78416397658356 + MAP_IMAGE_LNG_OFFSET], // 左上 (北西)
+    [35.06464445892178, 135.78518787088882 + MAP_IMAGE_LNG_OFFSET]  // 右下 (南東)
 ];
 const allowedBounds = L.latLngBounds(imageBounds);
 
@@ -85,7 +87,7 @@ function fitMapToIllustration() {
     map.setView(allowedBounds.getCenter(), Math.max(coverZoom, map.getMinZoom()), { animate: false });
 }
 
-L.imageOverlay('/river_map5.jpg', imageBounds, {
+L.imageOverlay('/river_map5.png', imageBounds, {
     interactive: true,
     opacity: 1.0
 }).addTo(map);
