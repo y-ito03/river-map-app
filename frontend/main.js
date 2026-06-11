@@ -74,14 +74,23 @@ const allowedBounds = L.latLngBounds(imageBounds);
 const map = L.map('map', {
     minZoom: 17,
     maxZoom: 22,
+    zoomSnap: 0.1,
+    zoomDelta: 0.25,
     maxBounds: imageBounds,
     maxBoundsViscosity: 1.0
-}).fitBounds(imageBounds);
+});
 
-L.imageOverlay('/river_map4.svg', imageBounds, {
+function fitMapToIllustration() {
+    const coverZoom = map.getBoundsZoom(imageBounds, true);
+    map.setView(allowedBounds.getCenter(), Math.max(coverZoom, map.getMinZoom()), { animate: false });
+}
+
+L.imageOverlay('/river_map5.jpg', imageBounds, {
     interactive: true,
     opacity: 1.0
 }).addTo(map);
+
+fitMapToIllustration();
 
 const resizeObserver = new ResizeObserver(() => {
     map.invalidateSize();
@@ -472,7 +481,7 @@ function renderGroupData(groupId) {
 
     const { classNumber } = parseGroupInfo(data.name);
     renderFreePostMarkers(String(classNumber));
-    map.fitBounds(imageBounds);
+    fitMapToIllustration();
 }
 
 function renderAllTracks(classFilter = allTracksClassFilter) {
@@ -521,7 +530,7 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
     document.getElementById('track-class-filter').addEventListener('change', (event) => {
         renderAllTracks(event.target.value);
     });
-    map.fitBounds(imageBounds);
+    fitMapToIllustration();
 }
 
 function drawHeatLayer(targetCreature) {
