@@ -134,7 +134,7 @@ function fitMapToIllustration() {
     map.setView(allowedBounds.getCenter(), Math.max(coverZoom, map.getMinZoom()), { animate: false });
 }
 
-L.imageOverlay('/river_map5_landscape.jpg', imageBounds, {
+L.imageOverlay('/river_map6_landscape.jpg', imageBounds, {
     interactive: true,
     opacity: 1.0
 }).addTo(map);
