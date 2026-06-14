@@ -28,6 +28,7 @@ async function setupDatabase() {
             id TEXT PRIMARY KEY,
             group_id TEXT,
             class_name TEXT,
+            verified_class_name TEXT,
             confidence REAL,
             lat REAL,
             lng REAL,
@@ -85,12 +86,13 @@ async function setupDatabase() {
                 const detId = crypto.randomUUID(); // 重複しない適当なIDを自動生成
                 
                 await db.run(
-                    `INSERT INTO detections (id, group_id, class_name, confidence, lat, lng, timestamp_sec, thumbnail_path) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    `INSERT INTO detections (id, group_id, class_name, verified_class_name, confidence, lat, lng, timestamp_sec, thumbnail_path)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
                         detId,
                         groupId,
                         row.detection_class_name,
+                        null,
                         parseFloat(row.detection_confidence),
                         lat,
                         lng,

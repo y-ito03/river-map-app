@@ -9,7 +9,17 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 8000;
 const ACCESS_CODE = process.env.ACCESS_CODE || '';
+const ACCESS_CODE_REQUIRED = process.env.ACCESS_CODE_REQUIRED === 'true';
 const ADMIN_CODE = process.env.ADMIN_CODE || ACCESS_CODE;
+const DETECTION_LABEL_OPTIONS = new Set([
+    'サワガニ',
+    'アカハライモリ',
+    'ヤゴ',
+    'カワニナ',
+    'エビ',
+    'カワムツ',
+    'その他'
+]);
 const mediaDir = path.join(__dirname, 'media');
 const uploadDir = path.join(mediaDir, 'uploads');
 const databaseFile = path.join(__dirname, 'database.sqlite');
@@ -25,7 +35,7 @@ function getAdminCode(req) {
 }
 
 function requireAccess(req, res, next) {
-    if (!ACCESS_CODE || getAccessCode(req) === ACCESS_CODE) {
+    if (!ACCESS_CODE_REQUIRED || !ACCESS_CODE || getAccessCode(req) === ACCESS_CODE) {
         next();
         return;
     }
@@ -45,7 +55,7 @@ function requireAdmin(req, res, next) {
 app.use('/media', (req, res, next) => {
     const hasAccess = ACCESS_CODE && getAccessCode(req) === ACCESS_CODE;
     const hasAdmin = ADMIN_CODE && getAdminCode(req) === ADMIN_CODE;
-    if ((ACCESS_CODE || ADMIN_CODE) && !hasAccess && !hasAdmin) {
+    if (ACCESS_CODE_REQUIRED && (ACCESS_CODE || ADMIN_CODE) && !hasAccess && !hasAdmin) {
         return res.status(401).json({ error: "アクセスコードが正しくありません" });
     }
 
@@ -116,6 +126,7 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
                     lat: det.lat,
                     lng: det.lng,
                     class_name: det.class_name,
+                    verified_class_name: det.verified_class_name,
                     timestamp: det.timestamp_sec,
                     thumbnail_url: det.thumbnail_path,
                     user_posts: posts
@@ -184,6 +195,31 @@ app.post('/api/free-posts', requireAccess, postUpload, async (req, res) => {
     } catch (err) {
         console.error("自由投稿の保存エラー:", err);
         res.status(500).json({ error: "保存に失敗しました" });
+    }
+});
+
+app.patch('/api/detections/:id/verification', requireAccess, async (req, res) => {
+    const detectionId = req.params.id;
+    const creature = String(req.body.creature || '').trim();
+
+    if (!DETECTION_LABEL_OPTIONS.has(creature)) {
+        return res.status(400).json({ error: "生き物の名前が正しくありません" });
+    }
+
+    try {
+        const result = await db.run(
+            "UPDATE detections SET verified_class_name = ? WHERE id = ?",
+            [creature, detectionId]
+        );
+
+        if (result.changes === 0) {
+            return res.status(404).json({ error: "検出データが見つかりません" });
+        }
+
+        res.json({ status: "success", verified_class_name: creature });
+    } catch (err) {
+        console.error("検出名の更新エラー:", err);
+        res.status(500).json({ error: "生き物の名前を保存できませんでした" });
     }
 });
 
@@ -312,6 +348,9 @@ app.delete('/api/admin/posts/:type/:id', requireAdmin, async (req, res) => {
 });
 
 async function addColumnIfMissing(tableName, columnName, columnDefinition) {
+    const table = await db.get("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", tableName);
+    if (!table) return;
+
     const columns = await db.all(`PRAGMA table_info(${tableName})`);
     if (!columns.some((column) => column.name === columnName)) {
         await db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
@@ -344,6 +383,7 @@ async function ensureSchema() {
             hidden INTEGER DEFAULT 0
         );
     `);
+    await addColumnIfMissing('detections', 'verified_class_name', 'TEXT');
     await addColumnIfMissing('user_posts', 'concept_image_url', 'TEXT');
     await addColumnIfMissing('user_posts', 'hidden', 'INTEGER DEFAULT 0');
     await addColumnIfMissing('free_posts', 'class_number', 'INTEGER');
@@ -357,8 +397,10 @@ async function startServer() {
 
     app.listen(PORT, () => {
         console.log(`バックエンドサーバーが起動しました: http://localhost:${PORT}`);
-        if (ACCESS_CODE) {
+        if (ACCESS_CODE_REQUIRED && ACCESS_CODE) {
             console.log("アクセスコード保護が有効です");
+        } else {
+            console.log("アクセスコードなしで利用できます");
         }
         if (ADMIN_CODE) {
             console.log("管理画面保護が有効です");

@@ -3,7 +3,7 @@
 // ウィザード内で入力・選択されたデータを一時的に保持するオブジェクト
 window.wizardData = {
     targetMarkerId: null,
-    targetType: "detection",
+    targetType: "free",
     lat: null,
     lng: null,
     classNumber: null,
@@ -20,18 +20,12 @@ window.openWizard = function(target) {
         window.wizardData.classNumber = target.classNumber || null;
         document.getElementById('wizard-target-label').innerText = "えらんだ場所に とうこう";
     } else {
-        window.wizardData.targetType = "detection";
-        window.wizardData.targetMarkerId = target;
-        window.wizardData.lat = null;
-        window.wizardData.lng = null;
-        window.wizardData.classNumber = null;
-        document.getElementById('wizard-target-label').innerText = "ピンの場所に とうこう";
+        return;
     }
     window.wizardData.creature = ""; // 生き物の選択をリセット
     
     // 入力欄のリセット
     document.getElementById('input-nickname').value = "";
-    document.getElementById('input-comment').value = "";
     document.getElementById('input-image').value = "";
     document.getElementById('input-concept-image').value = "";
     document.getElementById('preview-image').style.display = "none";
@@ -71,13 +65,10 @@ document.querySelectorAll('.next-btn').forEach(btn => {
         // 確認画面（ステップ5）に進む直前に、入力された内容を画面に反映させる
         if (nextStepNum === "5") {
             const creature = window.wizardData.creature || "（えらんでないよ）";
-            const comment = document.getElementById('input-comment').value || "（コメントなし）";
-
             // HTMLの確認用スパンテキストを書き換える
             document.getElementById('confirm-creature').innerText = creature;
-            document.getElementById('confirm-comment').innerText = comment;
 
-            // かいた絵（写真）のプレビューを確認画面にも同期する
+            // 生物のスケッチを確認画面にも同期する
             const previewImg = document.getElementById('preview-image');
             const confirmImg = document.getElementById('confirm-image');
             if (previewImg.style.display !== 'none') {
@@ -177,7 +168,7 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
         const formData = new FormData();
         formData.append('nickname', '');
         formData.append('creature', window.wizardData.creature);
-        formData.append('comment', document.getElementById('input-comment').value);
+        formData.append('comment', '');
 
         const fileInput = document.getElementById('input-image');
         if (fileInput.files.length > 0) {
@@ -189,17 +180,16 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
             formData.append('conceptImage', conceptFileInput.files[0]);
         }
 
-        let endpoint;
-        if (window.wizardData.targetType === "free") {
-            formData.append('lat', window.wizardData.lat);
-            formData.append('lng', window.wizardData.lng);
-            if (window.wizardData.classNumber) {
-                formData.append('classNumber', window.wizardData.classNumber);
-            }
-            endpoint = '/api/free-posts';
-        } else {
-            endpoint = `/api/detections/${window.wizardData.targetMarkerId}/posts`;
+        if (window.wizardData.targetType !== "free") {
+            throw new Error('投稿する場所が選ばれていません');
         }
+
+        formData.append('lat', window.wizardData.lat);
+        formData.append('lng', window.wizardData.lng);
+        if (window.wizardData.classNumber) {
+            formData.append('classNumber', window.wizardData.classNumber);
+        }
+        const endpoint = '/api/free-posts';
 
         const fetcher = window.fetchWithAccess || fetch;
         const response = await fetcher(endpoint, {

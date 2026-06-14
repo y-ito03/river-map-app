@@ -64,13 +64,60 @@ async function checkAccess() {
 }
 
 // --- 地図イラストを表示する範囲 ---
-// 新しい地図イラストは検出ポイントより少し西に見えるため、画像だけ東へ補正する。
+// 元データは縦向き地図の緯度経度で保存し、画面表示だけ時計回り90度へ変換する。
 const MAP_IMAGE_LNG_OFFSET = 0.00006;
-const imageBounds = [
+const sourceImageBounds = [
     [35.0668688174732, 135.78416397658356 + MAP_IMAGE_LNG_OFFSET], // 左上 (北西)
     [35.06464445892178, 135.78518787088882 + MAP_IMAGE_LNG_OFFSET]  // 右下 (南東)
 ];
+const sourceNorth = sourceImageBounds[0][0];
+const sourceWest = sourceImageBounds[0][1];
+const sourceSouth = sourceImageBounds[1][0];
+const sourceEast = sourceImageBounds[1][1];
+const sourceLatSpan = sourceNorth - sourceSouth;
+const sourceLngSpan = sourceEast - sourceWest;
+const sourceCenterLat = (sourceNorth + sourceSouth) / 2;
+const sourceCenterLng = (sourceWest + sourceEast) / 2;
+const imageBounds = [
+    [sourceCenterLat + sourceLngSpan / 2, sourceCenterLng - sourceLatSpan / 2],
+    [sourceCenterLat - sourceLngSpan / 2, sourceCenterLng + sourceLatSpan / 2]
+];
 const allowedBounds = L.latLngBounds(imageBounds);
+
+const targetNorth = imageBounds[0][0];
+const targetWest = imageBounds[0][1];
+const targetSouth = imageBounds[1][0];
+const targetEast = imageBounds[1][1];
+const targetLatSpan = targetNorth - targetSouth;
+const targetLngSpan = targetEast - targetWest;
+
+function toDisplayLatLng(lat, lng) {
+    const x = (lng - sourceWest) / sourceLngSpan;
+    const y = (sourceNorth - lat) / sourceLatSpan;
+    const rotatedX = 1 - y;
+    const rotatedY = x;
+
+    return [
+        targetNorth - rotatedY * targetLatSpan,
+        targetWest + rotatedX * targetLngSpan
+    ];
+}
+
+function toSourceLatLng(lat, lng) {
+    const rotatedX = (lng - targetWest) / targetLngSpan;
+    const rotatedY = (targetNorth - lat) / targetLatSpan;
+    const x = rotatedY;
+    const y = 1 - rotatedX;
+
+    return {
+        lat: sourceNorth - y * sourceLatSpan,
+        lng: sourceWest + x * sourceLngSpan
+    };
+}
+
+function toDisplayTrack(track = []) {
+    return track.map(point => toDisplayLatLng(point[0], point[1]));
+}
 
 // --- 地図の初期化 ---
 const map = L.map('map', {
@@ -87,7 +134,7 @@ function fitMapToIllustration() {
     map.setView(allowedBounds.getCenter(), Math.max(coverZoom, map.getMinZoom()), { animate: false });
 }
 
-L.imageOverlay('/river_map5.jpg', imageBounds, {
+L.imageOverlay('/river_map5_landscape.jpg', imageBounds, {
     interactive: true,
     opacity: 1.0
 }).addTo(map);
@@ -109,6 +156,7 @@ let currentHeatLayer = null;
 let currentGroupId = null;
 let freePostMode = false;
 let allTracksClassFilter = 'all';
+let selectedReviewGroupId = null;
 let coachmarkIndex = 0;
 
 const groupColors = {
@@ -136,11 +184,14 @@ const classNameToNumber = {
     learned: 3
 };
 const speciesIconMap = [
-    { keywords: ['アカハライモリ', 'イモリ'], url: '/species-icons/akaharaimori.svg' },
     { keywords: ['サワガニ'], url: '/species-icons/sawagani.svg' },
-    { keywords: ['ハグロトンボ', 'ハグロトンボのヤゴ'], url: '/species-icons/hagurotonbo-yago.svg' },
-    { keywords: ['コオニヤンマ', 'コオニヤンマのヤゴ'], url: '/species-icons/kooni-yago.svg' }
+    { keywords: ['アカハライモリ', 'イモリ'], url: '/species-icons/akaharaimori.svg' },
+    { keywords: ['ヤゴ', 'ハグロトンボ', 'コオニヤンマ'], url: '/species-icons/hagurotonbo-yago.svg' },
+    { keywords: ['カワニナ'], url: '/species-icons/other.svg' },
+    { keywords: ['エビ'], url: '/species-icons/other.svg' },
+    { keywords: ['カワムツ'], url: '/species-icons/other.svg' }
 ];
+const detectionLabelOptions = ['サワガニ', 'アカハライモリ', 'ヤゴ', 'カワニナ', 'エビ', 'カワムツ', 'その他'];
 
 const legendPanel = document.createElement('div');
 legendPanel.id = 'legend-panel';
@@ -246,6 +297,10 @@ function getCurrentFreePostClassNumber() {
         return Number(allTracksClassFilter);
     }
 
+    if (currentGroupId === 'all-tracks' && selectedReviewGroupId && surveyData[selectedReviewGroupId]) {
+        return parseGroupInfo(surveyData[selectedReviewGroupId].name).classNumber;
+    }
+
     return null;
 }
 
@@ -321,98 +376,179 @@ function renderImageTile(label, imageUrl, emptyText) {
     `;
 }
 
-function renderPostCard(posts, postIndex, groupId, detId) {
-    const post = posts[postIndex];
-    const userImgHtml = renderImageBlock('かいた絵', post.image_url);
-    const conceptImgHtml = renderImageBlock('考えた図', post.concept_image_url);
+function getDetectionDisplayName(det) {
+    return det.verified_class_name || `${det.class_name}?`;
+}
+
+function getGroupFreePosts(groupId) {
+    const group = surveyData[groupId];
+    if (!group) return [];
+    const { classNumber } = parseGroupInfo(group.name);
+    return freePosts.filter(post => Number(post.class_number) === Number(classNumber));
+}
+
+function getGroupPosts(groupId) {
+    const group = surveyData[groupId];
+    if (!group) return [];
+    const detectionPosts = (group.detections || []).flatMap(det => det.user_posts || []);
+    return [...detectionPosts, ...getGroupFreePosts(groupId)];
+}
+
+function findDetectionById(detId) {
+    for (const group of Object.values(surveyData)) {
+        const detection = (group.detections || []).find(det => det.id === detId);
+        if (detection) return detection;
+    }
+    return null;
+}
+
+function renderImageGallery(title, images, emptyText) {
+    const validImages = images.filter(item => item.url);
+    return `
+        <section class="review-section">
+            <h3>${escapeHtml(title)}</h3>
+            ${validImages.length > 0 ? `
+                <div class="review-image-grid">
+                    ${validImages.map(item => renderImageTile(item.label || title, item.url, emptyText)).join('')}
+                </div>
+            ` : `<div class="review-empty">${escapeHtml(emptyText)}</div>`}
+        </section>
+    `;
+}
+
+function renderDetectionReviewCard(det) {
+    const selectedValue = det.verified_class_name || '';
+    const options = [
+        `<option value="">${escapeHtml(getDetectionDisplayName(det))}</option>`,
+        ...detectionLabelOptions.map(name => `
+            <option value="${escapeHtml(name)}" ${selectedValue === name ? 'selected' : ''}>${escapeHtml(name)}</option>
+        `)
+    ].join('');
 
     return `
-        <div style="background:#fff9c4; padding:15px; border-radius:8px; border:1px solid #fbc02d;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <button ${postIndex === 0 ? 'disabled' : ''} onclick="window.changePost(event, '${groupId}', '${detId}', ${postIndex - 1})" style="padding:5px 15px; background:#fbc02d; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">＜</button>
-                <span style="font-weight:bold; font-size:0.9em; color:#333;">${posts.length}けん中 ${postIndex + 1}けん目</span>
-                <button ${postIndex === posts.length - 1 ? 'disabled' : ''} onclick="window.changePost(event, '${groupId}', '${detId}', ${postIndex + 1})" style="padding:5px 15px; background:#fbc02d; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">＞</button>
+        <article class="ai-detection-card">
+            ${renderImageTile('AI検出画像', det.thumbnail_url, '画像なし')}
+            <div class="ai-detection-body">
+                <p class="ai-detection-name">${escapeHtml(getDetectionDisplayName(det))}</p>
+                <select class="ai-label-select" data-detection-id="${escapeHtml(det.id)}" aria-label="正しい生物名">
+                    ${options}
+                </select>
             </div>
-            <div style="font-size:1em; line-height:1.6; color:#333;">
-                <b>いきもの:</b> ${escapeHtml(post.creature)}<br>
-                <b>コメント:</b> ${escapeHtml(post.comment)}
-                ${userImgHtml}
-                ${conceptImgHtml}
-            </div>
+        </article>
+    `;
+}
+
+function getSortedGroupEntries(classFilter = 'all') {
+    return Object.entries(surveyData)
+        .filter(([, group]) => groupMatchesClass(group.name, classFilter))
+        .sort(([, a], [, b]) => {
+            const infoA = parseGroupInfo(a.name);
+            const infoB = parseGroupInfo(b.name);
+            return infoA.classNumber - infoB.classNumber || infoA.teamNumber - infoB.teamNumber;
+        });
+}
+
+function getDefaultReviewGroupId(classFilter = 'all') {
+    const entries = getSortedGroupEntries(classFilter);
+    const davisOne = entries.find(([, group]) => {
+        const info = parseGroupInfo(group.name);
+        return info.classNumber === 1 && info.teamNumber === 1;
+    });
+    return (davisOne || entries[0])?.[0] || null;
+}
+
+function renderGroupSelector(selectedGroupId, classFilter) {
+    const groups = getSortedGroupEntries(classFilter);
+    if (groups.length === 0) return '';
+
+    return `
+        <label class="review-select-label">
+            表示する班
+            <select id="review-group-select" class="track-filter">
+                ${groups.map(([groupId, group]) => `
+                    <option value="${escapeHtml(groupId)}" ${groupId === selectedGroupId ? 'selected' : ''}>
+                        ${escapeHtml(getDisplayGroupName(group.name))}
+                    </option>
+                `).join('')}
+            </select>
+        </label>
+    `;
+}
+
+function renderGroupReviewHTML(groupId, options = {}) {
+    const group = surveyData[groupId];
+    if (!group) return '<p class="placeholder-text">表示できる班がありません。</p>';
+
+    const posts = getGroupPosts(groupId);
+    const detections = group.detections || [];
+    const groundImages = detections.map((det, index) => ({
+        label: `地上画像 ${index + 1}`,
+        url: det.thumbnail_url
+    }));
+    const placeSketches = posts.map((post, index) => ({
+        label: `場所のスケッチ ${index + 1}`,
+        url: post.concept_image_url
+    }));
+    const speciesSketches = posts.map((post, index) => ({
+        label: `${post.creature || '生物'}のスケッチ ${index + 1}`,
+        url: post.image_url
+    }));
+
+    return `
+        <div class="review-panel">
+            ${options.showSelector ? renderGroupSelector(groupId, options.classFilter || 'all') : ''}
+            <section class="review-section">
+                <h3>AIの検出候補</h3>
+                <div class="ai-detection-grid">
+                    ${detections.length > 0
+                        ? detections.map(renderDetectionReviewCard).join('')
+                        : '<div class="review-empty">AI検出データがありません。</div>'}
+                </div>
+            </section>
+            <section class="review-section">
+                <h3>地上画像・水中画像・場所のスケッチ</h3>
+                <div class="review-subsection">
+                    <h4>地上画像</h4>
+                    ${groundImages.length > 0 ? `<div class="review-image-grid">${groundImages.map(item => renderImageTile(item.label, item.url, '画像なし')).join('')}</div>` : '<div class="review-empty">地上画像はありません。</div>'}
+                </div>
+                <div class="review-subsection">
+                    <h4>水中画像</h4>
+                    <div class="review-empty">水中画像はまだありません。</div>
+                </div>
+                <div class="review-subsection">
+                    <h4>場所のスケッチ</h4>
+                    ${placeSketches.some(item => item.url) ? `<div class="review-image-grid">${placeSketches.filter(item => item.url).map(item => renderImageTile(item.label, item.url, '画像なし')).join('')}</div>` : '<div class="review-empty">まだ投稿はありません。</div>'}
+                </div>
+            </section>
+            ${renderImageGallery('生物のスケッチ', speciesSketches, 'まだ投稿はありません。')}
         </div>
     `;
 }
 
-// --- サイドパネルに表示するHTMLを作る関数 ---
-window.renderPanelHTML = function(groupId, detId, postIndex = 0) {
-    const det = surveyData[groupId].detections.find(d => d.id === detId);
+function openGroupReviewPanel(groupId, options = {}) {
+    if (!groupId) return;
+    selectedReviewGroupId = groupId;
+    const panel = document.getElementById('detail-panel');
+    const content = document.getElementById('panel-content');
+    document.getElementById('panel-title').innerText = `${getDisplayGroupName(surveyData[groupId].name)} の確認`;
+    content.innerHTML = renderGroupReviewHTML(groupId, options);
+    panel.classList.remove('hidden');
+}
 
-    let html = `
-        <div>
-            <b style="font-size: 1.4em; color: #333;">${escapeHtml(det.class_name)}</b><br>
-            
-            <div class="detail-image-grid">
-                ${renderImageTile('地上画像', det.thumbnail_url, '画像なし')}
-                <div class="image-preview-tile image-preview-empty">水中画像</div>
-            </div>
-            
-            <button onclick="window.openWizard('${det.id}')" style="margin-bottom:20px; padding:12px 15px; background:#4CAF50; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; width:100%; font-size: 1.1em;">
-                ＋ ついかする！
-            </button>
-    `;
+async function updateDetectionLabel(detId, creature) {
+    const response = await window.fetchWithAccess(`${API_BASE_URL}/api/detections/${encodeURIComponent(detId)}/verification`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creature })
+    });
 
-    if (det.user_posts && det.user_posts.length > 0) {
-        html += renderPostCard(det.user_posts, postIndex, groupId, detId);
-    } else {
-        html += `<p style="color:#666; text-align:center; margin-top:20px;">まだとうこうはありません。</p>`;
+    if (!response.ok) {
+        throw new Error(`保存できませんでした (${response.status})`);
     }
 
-    html += `</div>`;
-    return html;
-};
-
-function renderFreePostHTML(post) {
-    return `
-        <div>
-            <b style="font-size: 1.4em; color: #333;">えらんだ場所のとうこう</b><br>
-            <span style="font-size: 0.9em; color: #666;">地図でえらんだ場所のとうこうです</span><br>
-            <div style="background:#f3e5f5; padding:15px; border-radius:8px; border:1px solid #ce93d8; margin-top:15px;">
-                <div style="font-size:1em; line-height:1.6; color:#333;">
-                    <b>いきもの:</b> ${escapeHtml(post.creature)}<br>
-                    <b>コメント:</b> ${escapeHtml(post.comment)}
-                    ${renderImageBlock('かいた絵', post.image_url)}
-                    ${renderImageBlock('考えた図', post.concept_image_url)}
-                </div>
-            </div>
-        </div>
-    `;
+    const detection = findDetectionById(detId);
+    if (detection) detection.verified_class_name = creature;
 }
-
-window.openDetailPanel = function(groupId, detId, postIndex = 0) {
-    const panel = document.getElementById('detail-panel');
-    const content = document.getElementById('panel-content');
-    content.innerHTML = window.renderPanelHTML(groupId, detId, postIndex);
-    panel.classList.remove('hidden');
-
-    const det = surveyData[groupId].detections.find(d => d.id === detId);
-    map.panTo([det.lat, det.lng]);
-};
-
-function openFreePostPanel(postId) {
-    const post = freePosts.find(item => item.id === postId);
-    if (!post) return;
-
-    const panel = document.getElementById('detail-panel');
-    const content = document.getElementById('panel-content');
-    content.innerHTML = renderFreePostHTML(post);
-    panel.classList.remove('hidden');
-    map.panTo([post.lat, post.lng]);
-}
-
-window.changePost = function(event, groupId, detId, newIndex) {
-    if (event) event.stopPropagation();
-    window.openDetailPanel(groupId, detId, newIndex);
-};
 
 document.getElementById('close-panel').addEventListener('click', () => {
     document.getElementById('detail-panel').classList.add('hidden');
@@ -433,24 +569,24 @@ function clearMap() {
 function renderFreePostMarkers(classFilter = 'all') {
     freePosts.forEach(post => {
         if (!freePostMatchesClass(post, classFilter)) return;
-        const marker = L.marker([post.lat, post.lng], { icon: createSpeciesMarkerIcon(post.creature) }).addTo(map);
-        marker.on('click', () => openFreePostPanel(post.id));
+        const marker = L.marker(toDisplayLatLng(post.lat, post.lng), { icon: createSpeciesMarkerIcon(post.creature) }).addTo(map);
         currentMarkers.push(marker);
     });
 }
 
-function renderPostedDetectionMarkers(classFilter = 'all') {
+function renderPostedDetectionMarkers(classFilter = 'all', targetGroupId = null) {
     Object.entries(surveyData).forEach(([groupId, group]) => {
+        if (targetGroupId && groupId !== targetGroupId) return;
         if (!groupMatchesClass(group.name, classFilter) || !group.detections) return;
 
         group.detections.forEach(det => {
             if (!det.user_posts || det.user_posts.length === 0) return;
 
-            const marker = L.marker([det.lat, det.lng], {
+            const marker = L.marker(toDisplayLatLng(det.lat, det.lng), {
                 detId: det.id,
                 icon: createPostedIcon(det.user_posts)
             }).addTo(map);
-            marker.on('click', () => { window.openDetailPanel(groupId, det.id, 0); });
+            marker.on('click', () => { openGroupReviewPanel(groupId, { showSelector: currentGroupId === 'all-tracks', classFilter: allTracksClassFilter }); });
             currentMarkers.push(marker);
         });
     });
@@ -465,24 +601,14 @@ function renderGroupData(groupId) {
     clearMap();
 
     if (data.gps_track && data.gps_track.length > 0) {
-        const line = L.polyline(data.gps_track, getGroupStyle(data.name)).addTo(map);
+        const line = L.polyline(toDisplayTrack(data.gps_track), getGroupStyle(data.name)).addTo(map);
         currentTrackLayers.push(line);
-    }
-
-    if (data.detections) {
-        data.detections.forEach(det => {
-            const hasPosts = det.user_posts && det.user_posts.length > 0;
-            const marker = L.marker([det.lat, det.lng], {
-                detId: det.id,
-                icon: hasPosts ? createPostedIcon(det.user_posts) : createMarkerIcon('unposted')
-            }).addTo(map);
-            marker.on('click', () => { window.openDetailPanel(groupId, det.id, 0); });
-            currentMarkers.push(marker);
-        });
     }
 
     const { classNumber } = parseGroupInfo(data.name);
     renderFreePostMarkers(String(classNumber));
+    renderPostedDetectionMarkers(String(classNumber), groupId);
+    openGroupReviewPanel(groupId);
     fitMapToIllustration();
 }
 
@@ -501,7 +627,7 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
         if (!groupMatchesClass(group.name, classFilter)) return;
 
         const style = getGroupStyle(group.name);
-        const line = L.polyline(group.gps_track, style).addTo(map);
+        const line = L.polyline(toDisplayTrack(group.gps_track), style).addTo(map);
         line.on('click', () => {
             renderGroupData(groupId);
             document.querySelector('.title').innerText = `${APP_TITLE} - ${getDisplayGroupName(group.name)}`;
@@ -532,6 +658,10 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
     document.getElementById('track-class-filter').addEventListener('change', (event) => {
         renderAllTracks(event.target.value);
     });
+    const reviewGroupId = selectedReviewGroupId && surveyData[selectedReviewGroupId] && groupMatchesClass(surveyData[selectedReviewGroupId].name, classFilter)
+        ? selectedReviewGroupId
+        : getDefaultReviewGroupId(classFilter);
+    openGroupReviewPanel(reviewGroupId, { showSelector: true, classFilter });
     fitMapToIllustration();
 }
 
@@ -541,14 +671,15 @@ function drawHeatLayer(targetCreature) {
     Object.values(surveyData).forEach(group => {
         if (!group.detections) return;
         group.detections.forEach(det => {
-            if (targetCreature === 'all' || det.class_name === targetCreature) {
-                heatPoints.push([det.lat, det.lng, 1]);
+            const creatureName = det.verified_class_name || det.class_name;
+            if (targetCreature === 'all' || creatureName === targetCreature) {
+                heatPoints.push([...toDisplayLatLng(det.lat, det.lng), 1]);
             }
         });
     });
     freePosts.forEach(post => {
         if (targetCreature === 'all' || post.creature === targetCreature) {
-            heatPoints.push([post.lat, post.lng, 1]);
+            heatPoints.push([...toDisplayLatLng(post.lat, post.lng), 1]);
         }
     });
     currentHeatLayer = L.heatLayer(heatPoints, { radius: 25, blur: 15, maxZoom: 18 }).addTo(map);
@@ -564,7 +695,8 @@ function renderHeatmap() {
     Object.values(surveyData).forEach(group => {
         if (!group.detections) return;
         group.detections.forEach(det => {
-            creatureCounts[det.class_name] = (creatureCounts[det.class_name] || 0) + 1;
+            const creatureName = det.verified_class_name || det.class_name;
+            creatureCounts[creatureName] = (creatureCounts[creatureName] || 0) + 1;
         });
     });
     freePosts.forEach(post => {
@@ -610,14 +742,14 @@ const coachmarkSteps = [
     },
     {
         selector: '#btn-free-post',
-        title: '好きな場所に投稿',
-        body: 'このボタンを押してから地図をタップすると、自分でえらんだ場所にとうこうできます。',
+        title: '場所をえらんで投稿',
+        body: 'このボタンを押してから地図をタップすると、スケッチをとうこうする場所をえらべます。',
         before: () => document.getElementById('sidebar').classList.remove('hidden')
     },
     {
         selector: '#map',
         title: '地図',
-        body: 'ピンを押すと、その場所の画像や、みんなのとうこうが見られます。とうこうがある場所は、いきものの絵になります。',
+        body: '班が歩いた道と、とうこうされた場所を見ることができます。',
         before: () => document.getElementById('sidebar').classList.add('hidden')
     },
     {
@@ -734,6 +866,7 @@ function updateSidebarMenu() {
     btnAllTracks.className = 'nav-btn';
     btnAllTracks.innerText = 'ぜんぶの班の道を見る';
     btnAllTracks.addEventListener('click', () => {
+        selectedReviewGroupId = null;
         renderAllTracks();
         document.getElementById('sidebar').classList.add('hidden');
     });
@@ -744,7 +877,7 @@ function updateSidebarMenu() {
     const btnFreePost = document.createElement('button');
     btnFreePost.id = 'btn-free-post';
     btnFreePost.className = 'nav-btn';
-    btnFreePost.innerText = '好きな場所にとうこうする';
+    btnFreePost.innerText = '投稿する場所をえらぶ';
     btnFreePost.addEventListener('click', () => {
         setFreePostMode(true);
         document.getElementById('sidebar').classList.add('hidden');
@@ -829,11 +962,12 @@ map.on('click', (event) => {
         alert("とうこうできるのは、地図の中だけです。");
         return;
     }
+    const sourceLatLng = toSourceLatLng(event.latlng.lat, event.latlng.lng);
 
     window.openWizard({
         type: 'free',
-        lat: event.latlng.lat,
-        lng: event.latlng.lng,
+        lat: sourceLatLng.lat,
+        lng: sourceLatLng.lng,
         classNumber: getCurrentFreePostClassNumber()
     });
 });
@@ -866,6 +1000,32 @@ document.addEventListener('click', (event) => {
 
     event.stopPropagation();
     openImageLightbox(imageButton.dataset.fullImage, imageButton.dataset.imageLabel);
+});
+
+document.addEventListener('change', async (event) => {
+    const labelSelect = event.target.closest('.ai-label-select');
+    if (labelSelect) {
+        const creature = labelSelect.value;
+        if (!creature) return;
+
+        labelSelect.disabled = true;
+        try {
+            await updateDetectionLabel(labelSelect.dataset.detectionId, creature);
+            openGroupReviewPanel(selectedReviewGroupId, {
+                showSelector: currentGroupId === 'all-tracks',
+                classFilter: allTracksClassFilter
+            });
+        } catch (error) {
+            alert(error.message);
+            labelSelect.disabled = false;
+        }
+        return;
+    }
+
+    const reviewGroupSelect = event.target.closest('#review-group-select');
+    if (reviewGroupSelect) {
+        openGroupReviewPanel(reviewGroupSelect.value, { showSelector: true, classFilter: allTracksClassFilter });
+    }
 });
 document.getElementById('image-lightbox-close').addEventListener('click', (event) => {
     event.stopPropagation();

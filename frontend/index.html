@@ -23,34 +23,27 @@
         <input type="hidden" id="input-nickname" value="">
         
         <div id="step-2" class="wizard-step active">
-          <h3>どのいきものを みつけた？</h3>
+          <h3>生物のスケッチは、どのいきもの？</h3>
           <div class="creature-grid">
-            <button class="creature-btn" data-name="アカハライモリ">アカハライモリ</button>
             <button class="creature-btn" data-name="サワガニ">サワガニ</button>
-            <button class="creature-btn" data-name="ハグロトンボ">ハグロトンボ</button>
-            <button class="creature-btn" data-name="コオニヤンマ">コオニヤンマ</button>
+            <button class="creature-btn" data-name="アカハライモリ">アカハライモリ</button>
+            <button class="creature-btn" data-name="ヤゴ">ヤゴ</button>
+            <button class="creature-btn" data-name="カワニナ">カワニナ</button>
+            <button class="creature-btn" data-name="エビ">エビ</button>
+            <button class="creature-btn" data-name="カワムツ">カワムツ</button>
             <button type="button" class="creature-btn" data-name="その他">その他</button>
           </div>
         </div>
 
         <div id="step-3" class="wizard-step hidden">
-          <h3>かいた絵を えらんでね</h3>
-          <input type="file" id="input-image" accept="image/*" class="large-input">
-          <img id="preview-image" style="max-width: 100%; max-height: 200px; display: none; margin-top: 10px; border-radius: 8px;">
-          <h3>考えた図があれば えらんでね</h3>
+          <h3>場所のスケッチを えらんでね</h3>
           <input type="file" id="input-concept-image" accept="image/*" class="large-input">
           <img id="preview-concept-image" style="max-width: 100%; max-height: 200px; display: none; margin-top: 10px; border-radius: 8px;">
+          <h3>生物のスケッチを えらんでね</h3>
+          <input type="file" id="input-image" accept="image/*" class="large-input">
+          <img id="preview-image" style="max-width: 100%; max-height: 200px; display: none; margin-top: 10px; border-radius: 8px;">
           <div class="btn-area">
             <button class="prev-btn" data-prev="2">もどる</button>
-            <button class="next-btn" data-next="4">つぎへ</button>
-          </div>
-        </div>
-
-        <div id="step-4" class="wizard-step hidden">
-          <h3>気づいたことを かいてね</h3>
-          <textarea id="input-comment" class="large-input" rows="4" placeholder="どんなところにいた？ なにをしていた？"></textarea>
-          <div class="btn-area">
-            <button class="prev-btn" data-prev="3">もどる</button>
             <button class="next-btn" data-next="5">かくにん</button>
           </div>
         </div>
@@ -59,14 +52,13 @@
           <h3>これで とうろく する？</h3>
           <div class="confirm-box">
             <p><b>いきもの:</b> <span id="confirm-creature"></span></p>
-            <p><b>コメント:</b> <span id="confirm-comment"></span></p>
-            <p><b>かいた絵:</b></p>
-            <img id="confirm-image" style="max-width: 100%; max-height: 150px; border-radius: 8px;">
-            <p><b>考えた図:</b></p>
+            <p><b>場所のスケッチ:</b></p>
             <img id="confirm-concept-image" style="max-width: 100%; max-height: 150px; border-radius: 8px;">
+            <p><b>生物のスケッチ:</b></p>
+            <img id="confirm-image" style="max-width: 100%; max-height: 150px; border-radius: 8px;">
           </div>
           <div class="btn-area">
-            <button class="prev-btn" data-prev="4">もどる</button>
+            <button class="prev-btn" data-prev="3">もどる</button>
             <button id="submit-btn" class="submit-btn">とうろく</button>
           </div>
         </div>
@@ -95,11 +87,11 @@
       <!-- サイドパネル -->
       <aside id="detail-panel" class="detail-panel hidden">
         <div class="panel-header">
-          <h2 id="panel-title">ピンのくわしい情報</h2>
+          <h2 id="panel-title">班の確認</h2>
           <button id="close-panel" class="close-btn-panel">✖ とじる</button>
         </div>
         <div id="panel-content" class="panel-content">
-          <p class="placeholder-text">ピンをえらんでください</p>
+          <p class="placeholder-text">班をえらんでください</p>
         </div>
       </aside>
     </div>

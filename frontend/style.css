@@ -43,7 +43,7 @@ body, html {
 }
 
 .detail-panel {
-  width: 33.33%; min-width: 300px;
+  width: 40%; min-width: 360px; max-width: 560px;
   background-color: white; border-left: 2px solid #ddd;
   display: flex; flex-direction: column; z-index: 1500;
   transition: transform 0.3s ease;
@@ -160,6 +160,49 @@ body, html {
 }
 .image-preview-empty { background: #ddd; }
 .access-content { text-align: left; }
+
+.review-panel { display: flex; flex-direction: column; gap: 16px; }
+.review-section {
+  border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; background: #fff;
+}
+.review-section h3 {
+  margin: 0 0 10px; font-size: 1.05em; color: #2e7d32;
+}
+.review-subsection { margin-top: 12px; }
+.review-subsection:first-child { margin-top: 0; }
+.review-subsection h4 {
+  margin: 0 0 8px; font-size: 0.95em; color: #333;
+}
+.review-empty {
+  min-height: 72px; border-radius: 8px; background: #eeeeee; color: #666;
+  display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px;
+}
+.ai-detection-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;
+}
+.ai-detection-card {
+  border: 1px solid #d6e4d8; border-radius: 8px; overflow: hidden; background: #f9fff9;
+}
+.ai-detection-card .image-preview-tile {
+  width: 100%; height: 96px; border-radius: 0;
+}
+.ai-detection-body { padding: 10px; }
+.ai-detection-name {
+  margin: 0 0 8px; font-weight: bold; color: #333; font-size: 0.95em;
+}
+.ai-label-select {
+  width: 100%; padding: 8px; border: 1px solid #bdbdbd; border-radius: 6px; background: #fff;
+  font-size: 0.95em;
+}
+.review-image-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;
+}
+.review-image-grid .image-preview-tile {
+  width: 100%; min-height: 96px;
+}
+.review-select-label {
+  display: block; font-weight: bold; color: #333;
+}
 
 .image-lightbox {
   position: fixed; inset: 0; z-index: 6000; background: rgba(0,0,0,0.86);
