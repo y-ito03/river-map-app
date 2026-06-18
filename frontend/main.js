@@ -562,6 +562,7 @@ function renderGroupSelector(selectedGroupId, classFilter) {
 function renderGroupReviewHTML(groupId, options = {}) {
     const group = surveyData[groupId];
     if (!group) return '<p class="placeholder-text">表示できる班がありません。</p>';
+    const isAllRecordsView = options.viewMode === 'all-records';
 
     const posts = getGroupPosts(groupId);
     const detections = group.detections || [];
@@ -578,15 +579,17 @@ function renderGroupReviewHTML(groupId, options = {}) {
     return `
         <div class="review-panel">
             ${options.showSelector ? renderGroupSelector(groupId, options.classFilter || 'all') : ''}
-            <button type="button" class="panel-post-btn" data-group-id="${escapeHtml(groupId)}">この班で投稿する</button>
-            <section class="review-section">
-                <h3>AIの予想（画像を見て正しい生物名に変更しよう！）</h3>
-                <div class="ai-detection-grid">
-                    ${detections.length > 0
-                        ? detections.map(renderDetectionReviewCard).join('')
-                        : '<div class="review-empty">AI検出データがありません。</div>'}
-                </div>
-            </section>
+            ${isAllRecordsView ? '' : `<button type="button" class="panel-post-btn" data-group-id="${escapeHtml(groupId)}">この班で投稿する</button>`}
+            ${isAllRecordsView ? '' : `
+                <section class="review-section">
+                    <h3>AIの予想（画像を見て正しい生物名に変更しよう！）</h3>
+                    <div class="ai-detection-grid">
+                        ${detections.length > 0
+                            ? detections.map(renderDetectionReviewCard).join('')
+                            : '<div class="review-empty">AI検出データがありません。</div>'}
+                    </div>
+                </section>
+            `}
             <section class="review-section">
                 <h3>岩倉川の様子</h3>
                 <div class="review-subsection">
@@ -739,8 +742,11 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
         const style = getGroupStyle(group.name);
         const line = L.polyline(toDisplayTrack(group.gps_track), style).addTo(map);
         line.on('click', () => {
-            renderGroupData(groupId);
-            document.querySelector('.title').innerText = `${APP_TITLE} - ${getDisplayGroupName(group.name)}`;
+            openGroupReviewPanel(groupId, {
+                showSelector: true,
+                classFilter: allTracksClassFilter,
+                viewMode: 'all-records'
+            });
         });
         currentTrackLayers.push(line);
 
@@ -771,7 +777,7 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
     const reviewGroupId = selectedReviewGroupId && surveyData[selectedReviewGroupId] && groupMatchesClass(surveyData[selectedReviewGroupId].name, classFilter)
         ? selectedReviewGroupId
         : getDefaultReviewGroupId(classFilter);
-    openGroupReviewPanel(reviewGroupId, { showSelector: true, classFilter });
+    openGroupReviewPanel(reviewGroupId, { showSelector: true, classFilter, viewMode: 'all-records' });
     fitMapToIllustration();
 }
 
@@ -1119,7 +1125,11 @@ document.addEventListener('click', (event) => {
 document.addEventListener('change', async (event) => {
     const reviewGroupSelect = event.target.closest('#review-group-select');
     if (reviewGroupSelect) {
-        openGroupReviewPanel(reviewGroupSelect.value, { showSelector: true, classFilter: allTracksClassFilter });
+        openGroupReviewPanel(reviewGroupSelect.value, {
+            showSelector: true,
+            classFilter: allTracksClassFilter,
+            viewMode: currentGroupId === 'all-tracks' ? 'all-records' : undefined
+        });
     }
 });
 
