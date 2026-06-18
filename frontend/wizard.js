@@ -53,6 +53,9 @@ window.openWizard = function(target) {
 // 「やめる」ボタンで閉じる
 document.getElementById('close-wizard').addEventListener('click', () => {
     document.getElementById('wizard-modal').classList.add('hidden');
+    if (window.onPostCancelled) {
+        window.onPostCancelled();
+    }
 });
 
 // 「つぎへ」ボタンの共通処理

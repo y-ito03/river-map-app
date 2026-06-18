@@ -515,8 +515,8 @@ function renderDetectionReviewCard(det) {
                     <div class="ai-label-options" aria-label="正しい生物名">
                         ${optionControls}
                     </div>
+                    <button type="button" class="ai-label-save" data-detection-id="${escapeHtml(det.id)}">決定</button>
                 </details>
-                <button type="button" class="ai-label-save" data-detection-id="${escapeHtml(det.id)}">決定</button>
             </div>
         </article>
     `;
@@ -1073,6 +1073,10 @@ window.onPostSubmitted = async function() {
     setFreePostMode(false);
     await loadSurveyData();
     rerenderCurrentView();
+};
+
+window.onPostCancelled = function() {
+    setFreePostMode(false);
 };
 
 map.on('click', (event) => {
