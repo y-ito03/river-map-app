@@ -29,7 +29,8 @@ body, html {
 .sidebar ul { list-style: none; padding: 0; margin: 0; }
 .nav-btn {
   width: 100%; padding: 15px 20px; text-align: left; background: none;
-  border: none; border-bottom: 1px solid #eee; font-size: 1.1em; cursor: pointer;
+  border: none; border-bottom: 1px solid #eee; font-size: 1em; cursor: pointer;
+  white-space: nowrap;
 }
 .nav-btn:hover { background-color: #f0f0f0; }
 .nav-btn.active { background-color: #e8f5e9; color: #2e7d32; font-weight: bold; }
@@ -137,7 +138,11 @@ body, html {
 .prev-btn { background-color: #e0e0e0; color: #333; }
 .submit-btn { background-color: #FF9800; color: white; font-size: 1.3em; padding: 15px 30px; }
 .creature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.creature-btn { padding: 20px 10px; font-size: 1.1em; font-weight: bold; border: 2px solid #4CAF50; background-color: white; color: #4CAF50; border-radius: 8px; cursor: pointer; }
+.creature-btn {
+  padding: 18px 8px; font-size: 1rem; font-weight: bold;
+  border: 2px solid #4CAF50; background-color: white; color: #4CAF50;
+  border-radius: 8px; cursor: pointer; white-space: nowrap;
+}
 .creature-btn.selected { background-color: #4CAF50; color: white; }
 .confirm-box { background: #f9f9f9; padding: 15px; border-radius: 8px; text-align: left; margin-bottom: 15px; }
 .wizard-target-label { margin: 0 30px 10px 0; color: #2e7d32; font-weight: bold; }
@@ -208,12 +213,25 @@ body, html {
 .ai-detection-name.unconfirmed {
   color: #8a5a00;
 }
+.ai-label-menu {
+  margin-bottom: 8px;
+}
+.ai-label-menu summary {
+  list-style: none; border: 1px solid #bdbdbd; border-radius: 6px; background: #fff;
+  padding: 8px 10px; cursor: pointer; font-weight: bold; color: #333;
+}
+.ai-label-menu summary::-webkit-details-marker { display: none; }
+.ai-label-menu summary::after {
+  content: "▼"; float: right; font-size: 0.8em; color: #666;
+}
+.ai-label-menu[open] summary::after { content: "▲"; }
 .ai-label-options {
-  display: grid; gap: 6px; margin-bottom: 8px;
+  display: grid; gap: 6px; margin-top: 8px; margin-bottom: 8px;
 }
 .ai-label-choice {
-  display: flex; align-items: center; gap: 6px; font-size: 0.9em;
+  display: flex; align-items: center; gap: 6px; font-size: 0.86em;
   padding: 6px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fff;
+  white-space: nowrap;
 }
 .ai-label-choice input { width: 16px; height: 16px; }
 .ai-label-save {

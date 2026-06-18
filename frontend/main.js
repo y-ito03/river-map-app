@@ -186,10 +186,12 @@ const classNameToNumber = {
 const speciesIconMap = [
     { keywords: ['サワガニ'], url: '/species-icons/sawagani.svg' },
     { keywords: ['アカハライモリ', 'イモリ'], url: '/species-icons/akaharaimori.svg' },
-    { keywords: ['ヤゴ', 'ハグロトンボ', 'コオニヤンマ'], url: '/species-icons/hagurotonbo-yago.svg' },
-    { keywords: ['カワニナ'], url: '/species-icons/other.svg' },
-    { keywords: ['エビ'], url: '/species-icons/other.svg' },
-    { keywords: ['カワムツ'], url: '/species-icons/other.svg' }
+    { keywords: ['コオニヤンマ'], url: '/species-icons/kooni-yago.svg' },
+    { keywords: ['ヤゴ', 'ハグロトンボ'], url: '/species-icons/hagurotonbo-yago.svg' },
+    { keywords: ['カワニナ'], url: '/species-icons/kawanina.svg' },
+    { keywords: ['エビ'], url: '/species-icons/ebi.svg' },
+    { keywords: ['カワムツ'], url: '/species-icons/kawamutsu.svg' },
+    { keywords: ['その他の生き物', '生き物なし'], url: '/species-icons/other.svg' }
 ];
 const detectionLabelOptions = [
     'サワガニ',
@@ -199,7 +201,6 @@ const detectionLabelOptions = [
     'カワニナ',
     'エビ',
     'カワムツ',
-    'その他',
     'その他の生き物',
     '生き物なし'
 ];
@@ -472,9 +473,12 @@ function renderDetectionReviewCard(det) {
             ${renderImageTile('AI検出画像', det.thumbnail_url, '画像なし')}
             <div class="ai-detection-body">
                 <p class="ai-detection-name ${isConfirmed ? 'confirmed' : 'unconfirmed'}">${escapeHtml(getDetectionDisplayName(det))}</p>
-                <div class="ai-label-options" aria-label="正しい生物名">
-                    ${optionControls}
-                </div>
+                <details class="ai-label-menu">
+                    <summary>生物名をえらぶ</summary>
+                    <div class="ai-label-options" aria-label="正しい生物名">
+                        ${optionControls}
+                    </div>
+                </details>
                 <button type="button" class="ai-label-save" data-detection-id="${escapeHtml(det.id)}">決定</button>
             </div>
         </article>
@@ -547,23 +551,29 @@ function renderGroupReviewHTML(groupId, options = {}) {
                 </div>
             </section>
             <section class="review-section">
-                <h3>地上画像・水中画像・場所のスケッチ</h3>
+                <h3>岩倉川の様子</h3>
                 <div class="review-subsection">
-                    <h4>地上画像</h4>
-                    ${groundImage ? `<div class="review-image-grid single-image-grid">${renderImageTile('地上画像', groundImage, '画像なし')}</div>` : '<div class="review-empty">地上画像はありません。</div>'}
+                    <h4>地上の様子</h4>
+                    ${groundImage ? `<div class="review-image-grid single-image-grid">${renderImageTile('地上の様子', groundImage, '画像なし')}</div>` : '<div class="review-empty">地上の様子はありません。</div>'}
                 </div>
                 <div class="review-subsection">
-                    <h4>水中画像</h4>
+                    <h4>水中の様子</h4>
                     <div class="review-image-grid single-image-grid">
-                        ${renderImageTile('水中画像', '', '水中画像はまだありません。')}
+                        ${renderImageTile('水中の様子', '', '水中の様子はまだありません。')}
                     </div>
                 </div>
+            </section>
+            <section class="review-section">
+                <h3>みんなのとうこう</h3>
                 <div class="review-subsection">
                     <h4>場所のスケッチ</h4>
                     ${placeSketches.some(item => item.url) ? `<div class="review-image-grid">${placeSketches.filter(item => item.url).map(item => renderImageTile(item.label, item.url, '画像なし')).join('')}</div>` : '<div class="review-empty">まだ投稿はありません。</div>'}
                 </div>
+                <div class="review-subsection">
+                    <h4>生物のスケッチ</h4>
+                    ${speciesSketches.some(item => item.url) ? `<div class="review-image-grid">${speciesSketches.filter(item => item.url).map(item => renderImageTile(item.label, item.url, '画像なし')).join('')}</div>` : '<div class="review-empty">まだ投稿はありません。</div>'}
+                </div>
             </section>
-            ${renderImageGallery('生物のスケッチ', speciesSketches, 'まだ投稿はありません。')}
         </div>
     `;
 }
@@ -672,7 +682,7 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
     allTracksClassFilter = classFilter;
     clearMap();
     document.querySelector('.title').innerText = classFilter === 'all'
-        ? `${APP_TITLE} - すべての班の道`
+        ? `${APP_TITLE} - すべての班の記録`
         : `${APP_TITLE} - ${classNames[classFilter]}の道`;
 
     const legendItems = [];
@@ -789,13 +799,13 @@ const coachmarkSteps = [
     {
         selector: '#menu-btn',
         title: 'メニュー',
-        body: 'ここから、班の記録や、すべての班の道を見ることができます。',
+        body: 'ここから、班の記録や、すべての班の記録を見ることができます。',
         before: () => document.getElementById('sidebar').classList.add('hidden')
     },
     {
         selector: '#btn-all-tracks',
-        title: 'すべての班の道',
-        body: 'すべての班が歩いた道を、まとめて見ることができます。Davis、Hardy、Learnedだけをえらぶこともできます。',
+        title: 'すべての班の記録',
+        body: 'すべての班が歩いた道や投稿を、まとめて見ることができます。Davis、Hardy、Learnedだけをえらぶこともできます。',
         before: () => document.getElementById('sidebar').classList.remove('hidden')
     },
     {
@@ -922,7 +932,7 @@ function updateSidebarMenu() {
     const btnAllTracks = document.createElement('button');
     btnAllTracks.id = 'btn-all-tracks';
     btnAllTracks.className = 'nav-btn';
-    btnAllTracks.innerText = 'すべての班の道を見る';
+    btnAllTracks.innerText = 'すべての班の記録を見る';
     btnAllTracks.addEventListener('click', () => {
         selectedReviewGroupId = null;
         renderAllTracks();

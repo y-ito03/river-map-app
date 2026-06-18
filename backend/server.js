@@ -19,7 +19,6 @@ const DETECTION_LABEL_OPTIONS = new Set([
     'カワニナ',
     'エビ',
     'カワムツ',
-    'その他',
     'その他の生き物',
     '生き物なし'
 ]);
