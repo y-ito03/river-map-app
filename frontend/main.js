@@ -388,6 +388,43 @@ function renderImageTile(label, imageUrl, emptyText) {
     `;
 }
 
+function renderPopupImage(label, imageUrl) {
+    if (!imageUrl) {
+        return `
+            <div class="popup-sketch-empty">
+                <span>${escapeHtml(label)}</span>
+                <small>なし</small>
+            </div>
+        `;
+    }
+
+    const fullImageUrl = toMediaPath(imageUrl);
+    const safeImageUrl = escapeHtml(fullImageUrl);
+    return `
+        <button type="button" class="popup-sketch-thumb image-thumb-button" data-full-image="${safeImageUrl}" data-image-label="${escapeHtml(label)}">
+            <img src="${safeImageUrl}" alt="${escapeHtml(label)}">
+            <span>${escapeHtml(label)}</span>
+        </button>
+    `;
+}
+
+function renderPostSketchPopup(posts = []) {
+    const latestPost = posts.filter(Boolean).at(-1);
+    if (!latestPost) {
+        return '<div class="popup-sketch-card"><p>投稿はありません。</p></div>';
+    }
+
+    return `
+        <div class="popup-sketch-card">
+            <strong>${escapeHtml(latestPost.creature || 'とうこう')}</strong>
+            <div class="popup-sketch-grid">
+                ${renderPopupImage('場所のスケッチ', latestPost.concept_image_url)}
+                ${renderPopupImage('生物のスケッチ', latestPost.image_url)}
+            </div>
+        </div>
+    `;
+}
+
 function getVerifiedLabels(det) {
     const rawValue = det?.verified_class_name;
     if (!rawValue) return [];
@@ -474,7 +511,7 @@ function renderDetectionReviewCard(det) {
             <div class="ai-detection-body">
                 <p class="ai-detection-name ${isConfirmed ? 'confirmed' : 'unconfirmed'}">${escapeHtml(getDetectionDisplayName(det))}</p>
                 <details class="ai-label-menu">
-                    <summary>生物名をえらぶ</summary>
+                    <summary>生物名を選ぶ</summary>
                     <div class="ai-label-options" aria-label="正しい生物名">
                         ${optionControls}
                     </div>
@@ -634,6 +671,11 @@ function renderFreePostMarkers(classFilter = 'all') {
     freePosts.forEach(post => {
         if (!freePostMatchesClass(post, classFilter)) return;
         const marker = L.marker(toDisplayLatLng(post.lat, post.lng), { icon: createSpeciesMarkerIcon(post.creature) }).addTo(map);
+        marker.bindPopup(renderPostSketchPopup([post]), {
+            className: 'sketch-popup',
+            maxWidth: 260,
+            minWidth: 190
+        });
         currentMarkers.push(marker);
     });
 }
@@ -650,7 +692,11 @@ function renderPostedDetectionMarkers(classFilter = 'all', targetGroupId = null)
                 detId: det.id,
                 icon: createPostedIcon(det.user_posts)
             }).addTo(map);
-            marker.on('click', () => { openGroupReviewPanel(groupId, { showSelector: currentGroupId === 'all-tracks', classFilter: allTracksClassFilter }); });
+            marker.bindPopup(renderPostSketchPopup(det.user_posts), {
+                className: 'sketch-popup',
+                maxWidth: 260,
+                minWidth: 190
+            });
             currentMarkers.push(marker);
         });
     });
