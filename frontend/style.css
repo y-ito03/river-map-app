@@ -59,6 +59,14 @@ body, html {
 .close-btn-panel { background: none; border: none; font-size: 1em; color: #666; cursor: pointer; font-weight: bold; }
 .panel-content { flex: 1; padding: 20px; overflow-y: auto; }
 .placeholder-text { color: #999; text-align: center; margin-top: 50px; }
+.panel-reopen-tab {
+  position: absolute; top: 62px; right: 0; z-index: 1700;
+  border: none; border-radius: 8px 0 0 8px; padding: 12px 14px;
+  background: #2e7d32; color: #fff; font-weight: bold; cursor: pointer;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+  writing-mode: vertical-rl;
+}
+.panel-reopen-tab.hidden { display: none; }
 
 /* ヒートマップ集計パネル */
 /* ヒートマップ集計パネル */
@@ -224,6 +232,12 @@ body, html {
 .review-subsection h4 {
   margin: 0 0 8px; font-size: 0.95em; color: #333;
 }
+.river-state-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+.river-state-grid .review-subsection {
+  margin-top: 0;
+}
 .review-empty {
   min-height: 72px; border-radius: 8px; background: #eeeeee; color: #666;
   display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px;
@@ -338,12 +352,14 @@ body, html {
 
 @media (max-width: 800px) {
   .detail-panel { width: 100%; min-width: 0; position: absolute; right: 0; top: 0; bottom: 0; }
+  .panel-reopen-tab { top: 62px; padding: 10px 12px; }
   .sidebar { width: 85%; }
   .legend-panel { left: 10px; right: 10px; bottom: 10px; max-height: 30vh; }
   .modal { align-items: flex-start; }
   .modal-content { width: 96%; padding: 16px; }
   .large-input { width: 100%; box-sizing: border-box; }
   .btn-area { gap: 10px; flex-wrap: wrap; }
+  .river-state-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   #preview-image, #preview-concept-image { max-height: 130px !important; }
   #confirm-image, #confirm-concept-image { max-height: 110px !important; }
 }

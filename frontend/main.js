@@ -157,6 +157,8 @@ let currentGroupId = null;
 let freePostMode = false;
 let allTracksClassFilter = 'all';
 let selectedReviewGroupId = null;
+let lastPanelGroupId = null;
+let lastPanelOptions = {};
 let coachmarkIndex = 0;
 
 const groupColors = {
@@ -242,6 +244,13 @@ imageLightbox.innerHTML = `
     <img id="image-lightbox-img" class="image-lightbox-img" alt="">
 `;
 document.getElementById('app').appendChild(imageLightbox);
+
+const panelReopenTab = document.createElement('button');
+panelReopenTab.id = 'panel-reopen-tab';
+panelReopenTab.className = 'panel-reopen-tab hidden';
+panelReopenTab.type = 'button';
+panelReopenTab.innerText = '確認';
+document.getElementById('app').appendChild(panelReopenTab);
 
 function parseGroupInfo(groupName) {
     const name = String(groupName || '');
@@ -592,14 +601,16 @@ function renderGroupReviewHTML(groupId, options = {}) {
             `}
             <section class="review-section">
                 <h3>岩倉川の様子</h3>
-                <div class="review-subsection">
-                    <h4>地上の様子</h4>
-                    ${groundImage ? `<div class="review-image-grid single-image-grid">${renderImageTile('地上の様子', groundImage, '画像なし')}</div>` : '<div class="review-empty">地上の様子はありません。</div>'}
-                </div>
-                <div class="review-subsection">
-                    <h4>水中の様子</h4>
-                    <div class="review-image-grid single-image-grid">
-                        ${renderImageTile('水中の様子', '', '水中の様子はまだありません。')}
+                <div class="river-state-grid">
+                    <div class="review-subsection">
+                        <h4>地上の様子</h4>
+                        ${groundImage ? `<div class="review-image-grid single-image-grid">${renderImageTile('地上の様子', groundImage, '画像なし')}</div>` : '<div class="review-empty">地上の様子はありません。</div>'}
+                    </div>
+                    <div class="review-subsection">
+                        <h4>水中の様子</h4>
+                        <div class="review-image-grid single-image-grid">
+                            ${renderImageTile('水中の様子', '', '水中の様子はまだありません。')}
+                        </div>
                     </div>
                 </div>
             </section>
@@ -621,11 +632,14 @@ function renderGroupReviewHTML(groupId, options = {}) {
 function openGroupReviewPanel(groupId, options = {}) {
     if (!groupId) return;
     selectedReviewGroupId = groupId;
+    lastPanelGroupId = groupId;
+    lastPanelOptions = { ...options };
     const panel = document.getElementById('detail-panel');
     const content = document.getElementById('panel-content');
     document.getElementById('panel-title').innerText = `${getDisplayGroupName(surveyData[groupId].name)} の確認`;
     content.innerHTML = renderGroupReviewHTML(groupId, options);
     panel.classList.remove('hidden');
+    panelReopenTab.classList.add('hidden');
 }
 
 async function updateDetectionLabel(detId, creatures) {
@@ -646,6 +660,16 @@ async function updateDetectionLabel(detId, creatures) {
 
 document.getElementById('close-panel').addEventListener('click', () => {
     document.getElementById('detail-panel').classList.add('hidden');
+    if (lastPanelGroupId) {
+        panelReopenTab.innerText = '確認';
+        panelReopenTab.classList.remove('hidden');
+    }
+});
+
+panelReopenTab.addEventListener('click', () => {
+    if (lastPanelGroupId) {
+        openGroupReviewPanel(lastPanelGroupId, lastPanelOptions);
+    }
 });
 
 function startFreePostForGroup(groupId) {
@@ -667,6 +691,7 @@ function clearMap() {
     currentMarkers = [];
     document.getElementById('summary-panel').classList.add('hidden');
     document.getElementById('detail-panel').classList.add('hidden');
+    panelReopenTab.classList.add('hidden');
     legendPanel.classList.add('hidden');
 }
 
@@ -715,6 +740,9 @@ function renderGroupData(groupId) {
 
     if (data.gps_track && data.gps_track.length > 0) {
         const line = L.polyline(toDisplayTrack(data.gps_track), getGroupStyle(data.name)).addTo(map);
+        line.on('click', () => {
+            openGroupReviewPanel(groupId);
+        });
         currentTrackLayers.push(line);
     }
 
