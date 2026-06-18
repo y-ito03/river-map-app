@@ -14,11 +14,14 @@ const ADMIN_CODE = process.env.ADMIN_CODE || ACCESS_CODE;
 const DETECTION_LABEL_OPTIONS = new Set([
     'サワガニ',
     'アカハライモリ',
-    'ヤゴ',
+    'ハグロトンボ',
+    'コオニヤンマ',
     'カワニナ',
     'エビ',
     'カワムツ',
-    'その他'
+    'その他',
+    'その他の生き物',
+    '生き物なし'
 ]);
 const mediaDir = path.join(__dirname, 'media');
 const uploadDir = path.join(mediaDir, 'uploads');
@@ -200,23 +203,30 @@ app.post('/api/free-posts', requireAccess, postUpload, async (req, res) => {
 
 app.patch('/api/detections/:id/verification', requireAccess, async (req, res) => {
     const detectionId = req.params.id;
-    const creature = String(req.body.creature || '').trim();
+    const requestedCreatures = Array.isArray(req.body.creatures)
+        ? req.body.creatures
+        : [req.body.creature];
+    const creatures = [...new Set(requestedCreatures
+        .map(value => String(value || '').trim())
+        .filter(Boolean)
+    )];
 
-    if (!DETECTION_LABEL_OPTIONS.has(creature)) {
+    if (creatures.length === 0 || creatures.some(creature => !DETECTION_LABEL_OPTIONS.has(creature))) {
         return res.status(400).json({ error: "生き物の名前が正しくありません" });
     }
 
     try {
+        const verifiedClassName = JSON.stringify(creatures);
         const result = await db.run(
             "UPDATE detections SET verified_class_name = ? WHERE id = ?",
-            [creature, detectionId]
+            [verifiedClassName, detectionId]
         );
 
         if (result.changes === 0) {
             return res.status(404).json({ error: "検出データが見つかりません" });
         }
 
-        res.json({ status: "success", verified_class_name: creature });
+        res.json({ status: "success", verified_class_name: verifiedClassName, creatures });
     } catch (err) {
         console.error("検出名の更新エラー:", err);
         res.status(500).json({ error: "生き物の名前を保存できませんでした" });

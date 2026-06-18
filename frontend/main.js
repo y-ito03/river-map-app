@@ -191,7 +191,18 @@ const speciesIconMap = [
     { keywords: ['エビ'], url: '/species-icons/other.svg' },
     { keywords: ['カワムツ'], url: '/species-icons/other.svg' }
 ];
-const detectionLabelOptions = ['サワガニ', 'アカハライモリ', 'ヤゴ', 'カワニナ', 'エビ', 'カワムツ', 'その他'];
+const detectionLabelOptions = [
+    'サワガニ',
+    'アカハライモリ',
+    'ハグロトンボ',
+    'コオニヤンマ',
+    'カワニナ',
+    'エビ',
+    'カワムツ',
+    'その他',
+    'その他の生き物',
+    '生き物なし'
+];
 
 const legendPanel = document.createElement('div');
 legendPanel.id = 'legend-panel';
@@ -376,8 +387,32 @@ function renderImageTile(label, imageUrl, emptyText) {
     `;
 }
 
+function getVerifiedLabels(det) {
+    const rawValue = det?.verified_class_name;
+    if (!rawValue) return [];
+
+    if (Array.isArray(rawValue)) {
+        return rawValue.map(value => String(value).trim()).filter(Boolean);
+    }
+
+    const rawText = String(rawValue).trim();
+    if (!rawText) return [];
+
+    try {
+        const parsed = JSON.parse(rawText);
+        if (Array.isArray(parsed)) {
+            return parsed.map(value => String(value).trim()).filter(Boolean);
+        }
+    } catch (error) {
+        // 古い単一文字列の保存形式もそのまま読めるようにする。
+    }
+
+    return rawText.split(/[、,]/).map(value => value.trim()).filter(Boolean);
+}
+
 function getDetectionDisplayName(det) {
-    return det.verified_class_name || `${det.class_name}?`;
+    const verifiedLabels = getVerifiedLabels(det);
+    return verifiedLabels.length > 0 ? verifiedLabels.join('、') : `${det.class_name}?`;
 }
 
 function getGroupFreePosts(groupId) {
@@ -417,22 +452,30 @@ function renderImageGallery(title, images, emptyText) {
 }
 
 function renderDetectionReviewCard(det) {
-    const selectedValue = det.verified_class_name || '';
-    const options = [
-        `<option value="">${escapeHtml(getDetectionDisplayName(det))}</option>`,
-        ...detectionLabelOptions.map(name => `
-            <option value="${escapeHtml(name)}" ${selectedValue === name ? 'selected' : ''}>${escapeHtml(name)}</option>
-        `)
-    ].join('');
+    const selectedValues = getVerifiedLabels(det);
+    const selectedSet = new Set(selectedValues);
+    const isConfirmed = selectedValues.length > 0;
+    const optionControls = detectionLabelOptions.map(name => `
+        <label class="ai-label-choice">
+            <input
+                type="checkbox"
+                class="ai-label-checkbox"
+                value="${escapeHtml(name)}"
+                ${selectedSet.has(name) ? 'checked' : ''}
+            >
+            <span>${escapeHtml(name)}</span>
+        </label>
+    `).join('');
 
     return `
-        <article class="ai-detection-card">
+        <article class="ai-detection-card ${isConfirmed ? 'is-confirmed' : 'is-unconfirmed'}" data-detection-id="${escapeHtml(det.id)}">
             ${renderImageTile('AI検出画像', det.thumbnail_url, '画像なし')}
             <div class="ai-detection-body">
-                <p class="ai-detection-name">${escapeHtml(getDetectionDisplayName(det))}</p>
-                <select class="ai-label-select" data-detection-id="${escapeHtml(det.id)}" aria-label="正しい生物名">
-                    ${options}
-                </select>
+                <p class="ai-detection-name ${isConfirmed ? 'confirmed' : 'unconfirmed'}">${escapeHtml(getDetectionDisplayName(det))}</p>
+                <div class="ai-label-options" aria-label="正しい生物名">
+                    ${optionControls}
+                </div>
+                <button type="button" class="ai-label-save" data-detection-id="${escapeHtml(det.id)}">決定</button>
             </div>
         </article>
     `;
@@ -481,10 +524,7 @@ function renderGroupReviewHTML(groupId, options = {}) {
 
     const posts = getGroupPosts(groupId);
     const detections = group.detections || [];
-    const groundImages = detections.map((det, index) => ({
-        label: `地上画像 ${index + 1}`,
-        url: det.thumbnail_url
-    }));
+    const groundImage = detections.find(det => det.thumbnail_url)?.thumbnail_url || '';
     const placeSketches = posts.map((post, index) => ({
         label: `場所のスケッチ ${index + 1}`,
         url: post.concept_image_url
@@ -497,8 +537,9 @@ function renderGroupReviewHTML(groupId, options = {}) {
     return `
         <div class="review-panel">
             ${options.showSelector ? renderGroupSelector(groupId, options.classFilter || 'all') : ''}
+            <button type="button" class="panel-post-btn" data-group-id="${escapeHtml(groupId)}">この班で投稿する</button>
             <section class="review-section">
-                <h3>AIの検出候補</h3>
+                <h3>AIの予想（画像を見て正しい生物名に変更しよう！）</h3>
                 <div class="ai-detection-grid">
                     ${detections.length > 0
                         ? detections.map(renderDetectionReviewCard).join('')
@@ -509,11 +550,13 @@ function renderGroupReviewHTML(groupId, options = {}) {
                 <h3>地上画像・水中画像・場所のスケッチ</h3>
                 <div class="review-subsection">
                     <h4>地上画像</h4>
-                    ${groundImages.length > 0 ? `<div class="review-image-grid">${groundImages.map(item => renderImageTile(item.label, item.url, '画像なし')).join('')}</div>` : '<div class="review-empty">地上画像はありません。</div>'}
+                    ${groundImage ? `<div class="review-image-grid single-image-grid">${renderImageTile('地上画像', groundImage, '画像なし')}</div>` : '<div class="review-empty">地上画像はありません。</div>'}
                 </div>
                 <div class="review-subsection">
                     <h4>水中画像</h4>
-                    <div class="review-empty">水中画像はまだありません。</div>
+                    <div class="review-image-grid single-image-grid">
+                        ${renderImageTile('水中画像', '', '水中画像はまだありません。')}
+                    </div>
                 </div>
                 <div class="review-subsection">
                     <h4>場所のスケッチ</h4>
@@ -535,24 +578,35 @@ function openGroupReviewPanel(groupId, options = {}) {
     panel.classList.remove('hidden');
 }
 
-async function updateDetectionLabel(detId, creature) {
+async function updateDetectionLabel(detId, creatures) {
     const response = await window.fetchWithAccess(`${API_BASE_URL}/api/detections/${encodeURIComponent(detId)}/verification`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ creature })
+        body: JSON.stringify({ creatures })
     });
 
     if (!response.ok) {
         throw new Error(`保存できませんでした (${response.status})`);
     }
 
+    const payload = await response.json();
     const detection = findDetectionById(detId);
-    if (detection) detection.verified_class_name = creature;
+    if (detection) detection.verified_class_name = payload.verified_class_name;
 }
 
 document.getElementById('close-panel').addEventListener('click', () => {
     document.getElementById('detail-panel').classList.add('hidden');
 });
+
+function startFreePostForGroup(groupId) {
+    if (!groupId || !surveyData[groupId]) return;
+    selectedReviewGroupId = groupId;
+    if (currentGroupId !== 'all-tracks') {
+        currentGroupId = groupId;
+    }
+    setFreePostMode(true);
+    document.getElementById('detail-panel').classList.add('hidden');
+}
 
 function clearMap() {
     currentTrackLayers.forEach(layer => map.removeLayer(layer));
@@ -618,7 +672,7 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
     allTracksClassFilter = classFilter;
     clearMap();
     document.querySelector('.title').innerText = classFilter === 'all'
-        ? `${APP_TITLE} - ぜんぶの班の道`
+        ? `${APP_TITLE} - すべての班の道`
         : `${APP_TITLE} - ${classNames[classFilter]}の道`;
 
     const legendItems = [];
@@ -671,8 +725,9 @@ function drawHeatLayer(targetCreature) {
     Object.values(surveyData).forEach(group => {
         if (!group.detections) return;
         group.detections.forEach(det => {
-            const creatureName = det.verified_class_name || det.class_name;
-            if (targetCreature === 'all' || creatureName === targetCreature) {
+            const creatureNames = getVerifiedLabels(det);
+            const namesForHeat = creatureNames.length > 0 ? creatureNames : [det.class_name];
+            if (targetCreature === 'all' || namesForHeat.includes(targetCreature)) {
                 heatPoints.push([...toDisplayLatLng(det.lat, det.lng), 1]);
             }
         });
@@ -695,8 +750,11 @@ function renderHeatmap() {
     Object.values(surveyData).forEach(group => {
         if (!group.detections) return;
         group.detections.forEach(det => {
-            const creatureName = det.verified_class_name || det.class_name;
-            creatureCounts[creatureName] = (creatureCounts[creatureName] || 0) + 1;
+            const creatureNames = getVerifiedLabels(det);
+            const namesForCount = creatureNames.length > 0 ? creatureNames : [det.class_name];
+            namesForCount.forEach(creatureName => {
+                creatureCounts[creatureName] = (creatureCounts[creatureName] || 0) + 1;
+            });
         });
     });
     freePosts.forEach(post => {
@@ -731,13 +789,13 @@ const coachmarkSteps = [
     {
         selector: '#menu-btn',
         title: 'メニュー',
-        body: 'ここから、班の記録や、ぜんぶの班の道を見ることができます。',
+        body: 'ここから、班の記録や、すべての班の道を見ることができます。',
         before: () => document.getElementById('sidebar').classList.add('hidden')
     },
     {
         selector: '#btn-all-tracks',
-        title: 'ぜんぶの班の道',
-        body: 'ぜんぶの班が歩いた道を、まとめて見ることができます。Davis、Hardy、Learnedだけをえらぶこともできます。',
+        title: 'すべての班の道',
+        body: 'すべての班が歩いた道を、まとめて見ることができます。Davis、Hardy、Learnedだけをえらぶこともできます。',
         before: () => document.getElementById('sidebar').classList.remove('hidden')
     },
     {
@@ -864,7 +922,7 @@ function updateSidebarMenu() {
     const btnAllTracks = document.createElement('button');
     btnAllTracks.id = 'btn-all-tracks';
     btnAllTracks.className = 'nav-btn';
-    btnAllTracks.innerText = 'ぜんぶの班の道を見る';
+    btnAllTracks.innerText = 'すべての班の道を見る';
     btnAllTracks.addEventListener('click', () => {
         selectedReviewGroupId = null;
         renderAllTracks();
@@ -1003,28 +1061,44 @@ document.addEventListener('click', (event) => {
 });
 
 document.addEventListener('change', async (event) => {
-    const labelSelect = event.target.closest('.ai-label-select');
-    if (labelSelect) {
-        const creature = labelSelect.value;
-        if (!creature) return;
+    const reviewGroupSelect = event.target.closest('#review-group-select');
+    if (reviewGroupSelect) {
+        openGroupReviewPanel(reviewGroupSelect.value, { showSelector: true, classFilter: allTracksClassFilter });
+    }
+});
 
-        labelSelect.disabled = true;
+document.addEventListener('click', async (event) => {
+    const saveButton = event.target.closest('.ai-label-save');
+    if (saveButton) {
+        const card = saveButton.closest('.ai-detection-card');
+        const creatures = [...card.querySelectorAll('.ai-label-checkbox:checked')]
+            .map(input => input.value)
+            .filter(Boolean);
+
+        if (creatures.length === 0) {
+            alert('正しい生物名を1つ以上えらんでください。');
+            return;
+        }
+
+        saveButton.disabled = true;
+        saveButton.innerText = '保存中...';
         try {
-            await updateDetectionLabel(labelSelect.dataset.detectionId, creature);
+            await updateDetectionLabel(saveButton.dataset.detectionId, creatures);
             openGroupReviewPanel(selectedReviewGroupId, {
                 showSelector: currentGroupId === 'all-tracks',
                 classFilter: allTracksClassFilter
             });
         } catch (error) {
             alert(error.message);
-            labelSelect.disabled = false;
+            saveButton.disabled = false;
+            saveButton.innerText = '決定';
         }
         return;
     }
 
-    const reviewGroupSelect = event.target.closest('#review-group-select');
-    if (reviewGroupSelect) {
-        openGroupReviewPanel(reviewGroupSelect.value, { showSelector: true, classFilter: allTracksClassFilter });
+    const panelPostButton = event.target.closest('.panel-post-btn');
+    if (panelPostButton) {
+        startFreePostForGroup(panelPostButton.dataset.groupId);
     }
 });
 document.getElementById('image-lightbox-close').addEventListener('click', (event) => {

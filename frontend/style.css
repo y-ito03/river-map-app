@@ -162,6 +162,12 @@ body, html {
 .access-content { text-align: left; }
 
 .review-panel { display: flex; flex-direction: column; gap: 16px; }
+.panel-post-btn {
+  width: 100%; border: none; border-radius: 8px; padding: 12px 14px;
+  background: #4CAF50; color: #fff; font-size: 1.05em; font-weight: bold;
+  cursor: pointer;
+}
+.panel-post-btn:hover { background: #388e3c; }
 .review-section {
   border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; background: #fff;
 }
@@ -183,6 +189,12 @@ body, html {
 .ai-detection-card {
   border: 1px solid #d6e4d8; border-radius: 8px; overflow: hidden; background: #f9fff9;
 }
+.ai-detection-card.is-confirmed {
+  border-color: #43a047; background: #f1f8e9;
+}
+.ai-detection-card.is-unconfirmed {
+  border-color: #f9c74f; background: #fffdf2;
+}
 .ai-detection-card .image-preview-tile {
   width: 100%; height: 96px; border-radius: 0;
 }
@@ -190,12 +202,32 @@ body, html {
 .ai-detection-name {
   margin: 0 0 8px; font-weight: bold; color: #333; font-size: 0.95em;
 }
-.ai-label-select {
-  width: 100%; padding: 8px; border: 1px solid #bdbdbd; border-radius: 6px; background: #fff;
-  font-size: 0.95em;
+.ai-detection-name.confirmed {
+  color: #1b5e20;
+}
+.ai-detection-name.unconfirmed {
+  color: #8a5a00;
+}
+.ai-label-options {
+  display: grid; gap: 6px; margin-bottom: 8px;
+}
+.ai-label-choice {
+  display: flex; align-items: center; gap: 6px; font-size: 0.9em;
+  padding: 6px; border: 1px solid #e0e0e0; border-radius: 6px; background: #fff;
+}
+.ai-label-choice input { width: 16px; height: 16px; }
+.ai-label-save {
+  width: 100%; padding: 8px; border: none; border-radius: 6px;
+  background: #2e7d32; color: #fff; font-weight: bold; cursor: pointer;
+}
+.ai-label-save:disabled {
+  background: #9e9e9e; cursor: wait;
 }
 .review-image-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px;
+}
+.single-image-grid {
+  grid-template-columns: minmax(120px, 1fr);
 }
 .review-image-grid .image-preview-tile {
   width: 100%; min-height: 96px;
