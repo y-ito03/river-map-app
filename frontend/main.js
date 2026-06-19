@@ -185,13 +185,27 @@ const classNameToNumber = {
     hardy: 2,
     learned: 3
 };
+const classLetterToNumber = {
+    d: 1,
+    h: 2,
+    l: 3
+};
+const teamLetterToNumber = {
+    a: 1,
+    b: 2,
+    c: 3,
+    d: 4,
+    e: 5,
+    f: 6,
+    g: 7
+};
 const speciesIconMap = [
     { keywords: ['サワガニ'], url: '/species-icons/sawagani.svg' },
     { keywords: ['アカハライモリ', 'イモリ'], url: '/species-icons/akaharaimori.svg' },
     { keywords: ['コオニヤンマ'], url: '/species-icons/kooni-yago.svg' },
     { keywords: ['ヤゴ', 'ハグロトンボ'], url: '/species-icons/hagurotonbo-yago.svg' },
     { keywords: ['カワニナ'], url: '/species-icons/kawanina.svg' },
-    { keywords: ['エビ'], url: '/species-icons/ebi.svg' },
+    { keywords: ['エビ', 'ebi'], url: '/species-icons/ebi.svg' },
     { keywords: ['カワムツ'], url: '/species-icons/kawamutsu.svg' },
     { keywords: ['その他の生き物', '生き物なし'], url: '/species-icons/other.svg' }
 ];
@@ -206,6 +220,9 @@ const detectionLabelOptions = [
     'その他の生き物',
     '生き物なし'
 ];
+const speciesLabelAliases = {
+    ebi: 'エビ'
+};
 
 const legendPanel = document.createElement('div');
 legendPanel.id = 'legend-panel';
@@ -254,32 +271,58 @@ document.getElementById('app').appendChild(panelReopenTab);
 
 function parseGroupInfo(groupName) {
     const name = String(groupName || '');
+    const classTeamLetterMatch = name.match(/([DHL])\s*組.*?([A-G])\s*班/i);
+    if (classTeamLetterMatch) {
+        const teamLabel = classTeamLetterMatch[2].toUpperCase();
+        return {
+            classNumber: classLetterToNumber[classTeamLetterMatch[1].toLowerCase()] || 1,
+            teamNumber: teamLetterToNumber[teamLabel.toLowerCase()] || 1,
+            teamLabel
+        };
+    }
+
+    const reversedLetterMatch = name.match(/([DHL])\s*班.*?([A-G])\s*組/i);
+    if (reversedLetterMatch) {
+        const teamLabel = reversedLetterMatch[2].toUpperCase();
+        return {
+            classNumber: classLetterToNumber[reversedLetterMatch[1].toLowerCase()] || 1,
+            teamNumber: teamLetterToNumber[teamLabel.toLowerCase()] || 1,
+            teamLabel
+        };
+    }
+
     const japaneseMatch = name.match(/(\d+)\s*組.*?(\d+)\s*班/);
     if (japaneseMatch) {
         return {
             classNumber: Number(japaneseMatch[1]),
-            teamNumber: Number(japaneseMatch[2])
+            teamNumber: Number(japaneseMatch[2]),
+            teamLabel: japaneseMatch[2]
         };
     }
 
-    const englishMatch = name.match(/(Davis|Hardy|Learned).*?(\d+)\s*班/i);
+    const englishMatch = name.match(/(Davis|Hardy|Learned).*?([A-G]|\d+)\s*班/i);
     if (englishMatch) {
+        const rawTeam = englishMatch[2];
+        const isLetterTeam = /^[A-G]$/i.test(rawTeam);
+        const teamLabel = isLetterTeam ? rawTeam.toUpperCase() : rawTeam;
         return {
             classNumber: classNameToNumber[englishMatch[1].toLowerCase()] || 1,
-            teamNumber: Number(englishMatch[2])
+            teamNumber: isLetterTeam ? (teamLetterToNumber[rawTeam.toLowerCase()] || 1) : Number(rawTeam),
+            teamLabel
         };
     }
 
     const teamMatch = name.match(/(\d+)\s*班/);
     return {
         classNumber: 1,
-        teamNumber: teamMatch ? Number(teamMatch[1]) : 1
+        teamNumber: teamMatch ? Number(teamMatch[1]) : 1,
+        teamLabel: teamMatch ? teamMatch[1] : '1'
     };
 }
 
 function getDisplayGroupName(groupName) {
-    const { classNumber, teamNumber } = parseGroupInfo(groupName);
-    return `${classNames[classNumber] || `Class ${classNumber}`} ${teamNumber}班`;
+    const { classNumber, teamLabel } = parseGroupInfo(groupName);
+    return `${classNames[classNumber] || `Class ${classNumber}`} ${teamLabel}班`;
 }
 
 function getGroupStyle(groupName) {
@@ -338,6 +381,11 @@ function getSpeciesIconUrl(creatureName) {
     const name = String(creatureName || '');
     const match = speciesIconMap.find(item => item.keywords.some(keyword => name.includes(keyword)));
     return match?.url || '/species-icons/other.svg';
+}
+
+function normalizeSpeciesLabel(creatureName) {
+    const name = String(creatureName || '').trim();
+    return speciesLabelAliases[name.toLowerCase()] || name;
 }
 
 function getPrimaryPostCreature(posts) {
@@ -459,7 +507,7 @@ function getVerifiedLabels(det) {
 
 function getDetectionDisplayName(det) {
     const verifiedLabels = getVerifiedLabels(det);
-    return verifiedLabels.length > 0 ? verifiedLabels.join('、') : `${det.class_name}?`;
+    return verifiedLabels.length > 0 ? verifiedLabels.join('、') : `${normalizeSpeciesLabel(det.class_name)}?`;
 }
 
 function getGroupFreePosts(groupId) {
@@ -816,7 +864,7 @@ function drawHeatLayer(targetCreature) {
         if (!group.detections) return;
         group.detections.forEach(det => {
             const creatureNames = getVerifiedLabels(det);
-            const namesForHeat = creatureNames.length > 0 ? creatureNames : [det.class_name];
+            const namesForHeat = creatureNames.length > 0 ? creatureNames : [normalizeSpeciesLabel(det.class_name)];
             if (targetCreature === 'all' || namesForHeat.includes(targetCreature)) {
                 heatPoints.push([...toDisplayLatLng(det.lat, det.lng), 1]);
             }
@@ -841,7 +889,7 @@ function renderHeatmap() {
         if (!group.detections) return;
         group.detections.forEach(det => {
             const creatureNames = getVerifiedLabels(det);
-            const namesForCount = creatureNames.length > 0 ? creatureNames : [det.class_name];
+            const namesForCount = creatureNames.length > 0 ? creatureNames : [normalizeSpeciesLabel(det.class_name)];
             namesForCount.forEach(creatureName => {
                 creatureCounts[creatureName] = (creatureCounts[creatureName] || 0) + 1;
             });
