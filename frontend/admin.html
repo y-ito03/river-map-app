@@ -53,6 +53,50 @@
       </section>
 
       <section id="detections-panel" class="hidden">
+        <section class="admin-panel add-detection-panel">
+          <h2>検出候補を追加</h2>
+          <p>AIがうまく見つけられなかった候補を、班の記録に手動で追加できます。場所を指定しない場合は、その班の道の中央あたりに追加されます。</p>
+          <form id="add-detection-form" class="add-detection-form">
+            <label>
+              班
+              <select id="add-detection-group" name="group_id" required>
+                <option value="">班を選ぶ</option>
+              </select>
+            </label>
+            <label>
+              候補名
+              <select id="add-detection-class" name="class_name" required>
+                <option value="">生物名を選ぶ</option>
+              </select>
+            </label>
+            <label>
+              参考画像
+              <input id="add-detection-thumbnail" name="thumbnail" type="file" accept="image/*">
+            </label>
+            <details class="advanced-fields">
+              <summary>場所や時刻を細かく指定する</summary>
+              <div class="advanced-field-grid">
+                <label>
+                  緯度
+                  <input id="add-detection-lat" name="lat" type="number" step="any" placeholder="空欄で自動">
+                </label>
+                <label>
+                  経度
+                  <input id="add-detection-lng" name="lng" type="number" step="any" placeholder="空欄で自動">
+                </label>
+                <label>
+                  動画内の秒数
+                  <input id="add-detection-time" name="timestamp_sec" type="number" step="0.01" placeholder="任意">
+                </label>
+              </div>
+            </details>
+            <div class="form-actions">
+              <button type="submit">候補を追加</button>
+              <span id="add-detection-message" class="form-message"></span>
+            </div>
+          </form>
+        </section>
+
         <div class="toolbar">
           <div class="filter-group">
             <select id="detection-status-filter" aria-label="検出候補の表示状態">

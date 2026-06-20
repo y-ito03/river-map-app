@@ -5,6 +5,7 @@ const { open } = require('sqlite');
 const multer = require('multer'); // ファイルを処理するツール
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -70,6 +71,30 @@ function getSelectedImagePath(groupId, imageName) {
     return null;
 }
 
+function getDefaultGroupPoint(gpsTrack) {
+    let points = [];
+    try {
+        points = JSON.parse(gpsTrack || '[]');
+    } catch (error) {
+        points = [];
+    }
+
+    const validPoints = points.filter(point => (
+        Array.isArray(point)
+        && point.length >= 2
+        && Number.isFinite(Number(point[0]))
+        && Number.isFinite(Number(point[1]))
+    ));
+
+    if (validPoints.length === 0) return null;
+
+    const point = validPoints[Math.floor(validPoints.length / 2)];
+    return {
+        lat: Number(point[0]),
+        lng: Number(point[1])
+    };
+}
+
 app.use('/media', (req, res, next) => {
     const hasAccess = ACCESS_CODE && getAccessCode(req) === ACCESS_CODE;
     const hasAdmin = ADMIN_CODE && getAdminCode(req) === ADMIN_CODE;
@@ -100,7 +125,11 @@ const storage = multer.diskStorage({
     },
     filename: function (req, file, cb) {
         // 名前が被らないように「時間＋元のファイル形式」で保存
-        const prefix = file.fieldname === 'conceptImage' ? 'concept_' : 'post_';
+        const prefix = file.fieldname === 'conceptImage'
+            ? 'concept_'
+            : file.fieldname === 'thumbnail'
+                ? 'manual_detection_'
+                : 'post_';
         cb(null, prefix + Date.now() + '_' + Math.round(Math.random() * 1E9) + path.extname(file.originalname));
     }
 });
@@ -109,6 +138,7 @@ const postUpload = upload.fields([
     { name: 'image', maxCount: 1 },
     { name: 'conceptImage', maxCount: 1 }
 ]);
+const manualDetectionUpload = upload.single('thumbnail');
 
 let db;
 
@@ -338,6 +368,7 @@ app.patch('/api/admin/posts/:type/:id', requireAdmin, async (req, res) => {
 
 app.get('/api/admin/detections', requireAdmin, async (req, res) => {
     try {
+        const groups = await db.all("SELECT id, name FROM groups ORDER BY name ASC");
         const detections = await db.all(`
             SELECT
                 d.id,
@@ -356,10 +387,74 @@ app.get('/api/admin/detections', requireAdmin, async (req, res) => {
             ORDER BY g.name ASC, d.timestamp_sec ASC, d.id ASC
         `);
 
-        res.json({ detections, label_options: DETECTION_LABEL_OPTIONS });
+        res.json({ groups, detections, label_options: DETECTION_LABEL_OPTIONS });
     } catch (err) {
         console.error("管理用検出候補一覧の取得エラー:", err);
         res.status(500).json({ error: "検出候補一覧の取得に失敗しました" });
+    }
+});
+
+app.post('/api/admin/detections', requireAdmin, manualDetectionUpload, async (req, res) => {
+    const groupId = String(req.body.group_id || '').trim();
+    const className = String(req.body.class_name || '').trim();
+    const timestamp = req.body.timestamp_sec === undefined || req.body.timestamp_sec === ''
+        ? null
+        : Number(req.body.timestamp_sec);
+    let lat = req.body.lat === undefined || req.body.lat === '' ? null : Number(req.body.lat);
+    let lng = req.body.lng === undefined || req.body.lng === '' ? null : Number(req.body.lng);
+
+    if (!groupId) {
+        return res.status(400).json({ error: "班を選んでください" });
+    }
+
+    if (!DETECTION_LABEL_OPTION_SET.has(className)) {
+        return res.status(400).json({ error: "候補名が正しくありません" });
+    }
+
+    if (timestamp !== null && !Number.isFinite(timestamp)) {
+        return res.status(400).json({ error: "動画内の時刻が正しくありません" });
+    }
+
+    try {
+        const group = await db.get("SELECT id, gps_track FROM groups WHERE id = ?", groupId);
+        if (!group) {
+            return res.status(404).json({ error: "班が見つかりません" });
+        }
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            const defaultPoint = getDefaultGroupPoint(group.gps_track);
+            if (!defaultPoint) {
+                return res.status(400).json({ error: "追加する場所を決められませんでした" });
+            }
+            lat = defaultPoint.lat;
+            lng = defaultPoint.lng;
+        }
+
+        const thumbnailPath = req.file ? `uploads/${req.file.filename}` : null;
+        const detectionId = crypto.randomUUID();
+
+        await db.run(
+            `INSERT INTO detections
+                (id, group_id, class_name, verified_class_name, confidence, lat, lng, timestamp_sec, thumbnail_path, hidden)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                detectionId,
+                groupId,
+                className,
+                null,
+                null,
+                lat,
+                lng,
+                timestamp,
+                thumbnailPath,
+                0
+            ]
+        );
+
+        res.json({ status: "success", id: detectionId });
+    } catch (err) {
+        console.error("検出候補の追加エラー:", err);
+        res.status(500).json({ error: "検出候補の追加に失敗しました" });
     }
 });
 

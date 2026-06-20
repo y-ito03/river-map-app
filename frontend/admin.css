@@ -49,6 +49,11 @@ body {
   margin: 0 0 8px;
 }
 
+.admin-panel p {
+  color: #4d5b52;
+  line-height: 1.55;
+}
+
 .login-row,
 .toolbar,
 .filter-group,
@@ -131,6 +136,60 @@ button:disabled {
 .summary-text {
   margin: 0 0 12px;
   color: #4d5b52;
+}
+
+.add-detection-panel {
+  margin-bottom: 16px;
+}
+
+.add-detection-form {
+  display: grid;
+  gap: 12px;
+}
+
+.add-detection-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.add-detection-form > label {
+  min-width: 220px;
+}
+
+.add-detection-form {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: end;
+}
+
+.advanced-fields,
+.form-actions {
+  grid-column: 1 / -1;
+}
+
+.advanced-fields summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #2e7d32;
+}
+
+.advanced-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.form-message {
+  color: #2e7d32;
+  font-weight: 700;
 }
 
 .posts-list {

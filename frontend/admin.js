@@ -20,10 +20,15 @@ const reloadDetectionsBtn = document.getElementById('reload-detections-btn');
 const detectionStatusFilter = document.getElementById('detection-status-filter');
 const detectionGroupFilter = document.getElementById('detection-group-filter');
 const detectionSummaryText = document.getElementById('detection-summary-text');
+const addDetectionForm = document.getElementById('add-detection-form');
+const addDetectionGroup = document.getElementById('add-detection-group');
+const addDetectionClass = document.getElementById('add-detection-class');
+const addDetectionMessage = document.getElementById('add-detection-message');
 
 let posts = [];
 let detections = [];
 let labelOptions = [];
+let groups = [];
 let activeView = 'posts';
 const detectionLabelAliases = {
   ebi: 'エビ',
@@ -105,6 +110,23 @@ async function fetchJson(url, options = {}) {
       ...adminHeaders(),
       ...(options.headers || {}),
     },
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || `通信に失敗しました (${response.status})`);
+  }
+
+  return response.json();
+}
+
+async function fetchForm(url, formData) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'X-Admin-Code': getAdminCode(),
+    },
+    body: formData,
   });
 
   if (!response.ok) {
@@ -222,18 +244,43 @@ async function loadPosts() {
 
 function updateDetectionGroupFilter() {
   const currentValue = detectionGroupFilter.value;
-  const groups = [...new Map(detections.map((detection) => [
-    detection.group_name || detection.group_id || '班不明',
-    detection.group_name || detection.group_id || '班不明',
-  ])).values()].sort((a, b) => a.localeCompare(b, 'ja'));
+  const groupNames = groups
+    .map((group) => group.name || group.id || '班不明')
+    .sort((a, b) => a.localeCompare(b, 'ja'));
 
   detectionGroupFilter.innerHTML = `
     <option value="all">すべての班</option>
-    ${groups.map((groupName) => `<option value="${escapeHtml(groupName)}">${escapeHtml(groupName)}</option>`).join('')}
+    ${groupNames.map((groupName) => `<option value="${escapeHtml(groupName)}">${escapeHtml(groupName)}</option>`).join('')}
   `;
 
   if ([...detectionGroupFilter.options].some((option) => option.value === currentValue)) {
     detectionGroupFilter.value = currentValue;
+  }
+}
+
+function updateAddDetectionFormOptions() {
+  const selectedGroup = addDetectionGroup.value;
+  const selectedClass = addDetectionClass.value;
+
+  addDetectionGroup.innerHTML = `
+    <option value="">班を選ぶ</option>
+    ${groups.map((group) => `
+      <option value="${escapeHtml(group.id)}">${escapeHtml(group.name || group.id)}</option>
+    `).join('')}
+  `;
+
+  addDetectionClass.innerHTML = `
+    <option value="">生物名を選ぶ</option>
+    ${labelOptions.map((name) => `
+      <option value="${escapeHtml(name)}">${escapeHtml(name)}</option>
+    `).join('')}
+  `;
+
+  if ([...addDetectionGroup.options].some((option) => option.value === selectedGroup)) {
+    addDetectionGroup.value = selectedGroup;
+  }
+  if ([...addDetectionClass.options].some((option) => option.value === selectedClass)) {
+    addDetectionClass.value = selectedClass;
   }
 }
 
@@ -324,9 +371,11 @@ function renderDetections() {
 async function loadDetections() {
   detectionSummaryText.textContent = '読み込み中...';
   const data = await fetchJson('/api/admin/detections');
+  groups = data.groups || [];
   detections = data.detections || [];
   labelOptions = data.label_options || [];
   updateDetectionGroupFilter();
+  updateAddDetectionFormOptions();
   renderDetections();
 }
 
@@ -367,6 +416,29 @@ async function saveDetectionName(id) {
   await loadDetections();
 }
 
+async function addDetection(event) {
+  event.preventDefault();
+
+  const formData = new FormData(addDetectionForm);
+  if (!formData.get('group_id') || !formData.get('class_name')) {
+    addDetectionMessage.textContent = '班と候補名を選んでください。';
+    return;
+  }
+
+  const currentGroup = formData.get('group_id');
+  addDetectionMessage.textContent = '追加中...';
+
+  try {
+    await fetchForm('/api/admin/detections', formData);
+    addDetectionForm.reset();
+    addDetectionGroup.value = currentGroup;
+    addDetectionMessage.textContent = '候補を追加しました。';
+    await loadDetections();
+  } catch (error) {
+    addDetectionMessage.textContent = error.message;
+  }
+}
+
 async function togglePost(type, id, hidden) {
   await fetchJson(`/api/admin/posts/${type}/${id}`, {
     method: 'PATCH',
@@ -403,6 +475,7 @@ statusFilter.addEventListener('change', renderPosts);
 typeFilter.addEventListener('change', renderPosts);
 detectionStatusFilter.addEventListener('change', renderDetections);
 detectionGroupFilter.addEventListener('change', renderDetections);
+addDetectionForm.addEventListener('submit', addDetection);
 adminTabs.addEventListener('click', (event) => {
   const button = event.target.closest('.tab-btn');
   if (!button) return;
