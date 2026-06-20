@@ -623,7 +623,8 @@ function renderGroupReviewHTML(groupId, options = {}) {
 
     const posts = getGroupPosts(groupId);
     const detections = group.detections || [];
-    const groundImage = detections.find(det => det.thumbnail_url)?.thumbnail_url || '';
+    const groundImage = group.selected_images?.ground || '';
+    const underwaterImage = group.selected_images?.underwater || '';
     const placeSketches = posts.map((post, index) => ({
         label: `場所のスケッチ ${index + 1}`,
         url: post.concept_image_url
@@ -656,9 +657,7 @@ function renderGroupReviewHTML(groupId, options = {}) {
                     </div>
                     <div class="review-subsection">
                         <h4>水中の様子</h4>
-                        <div class="review-image-grid single-image-grid">
-                            ${renderImageTile('水中の様子', '', '水中の様子はまだありません。')}
-                        </div>
+                        ${underwaterImage ? `<div class="review-image-grid single-image-grid">${renderImageTile('水中の様子', underwaterImage, '画像なし')}</div>` : '<div class="review-empty">水中の様子はありません。</div>'}
                     </div>
                 </div>
             </section>

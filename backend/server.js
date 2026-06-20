@@ -25,6 +25,7 @@ const DETECTION_LABEL_OPTIONS = new Set([
 const mediaDir = path.join(__dirname, 'media');
 const uploadDir = path.join(mediaDir, 'uploads');
 const databaseFile = path.join(__dirname, 'database.sqlite');
+const SELECTED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
 
 app.use(express.json());
 
@@ -52,6 +53,20 @@ function requireAdmin(req, res, next) {
     }
 
     res.status(401).json({ error: "管理用コードが正しくありません" });
+}
+
+function getSelectedImagePath(groupId, imageName) {
+    const selectedDir = path.resolve(mediaDir, groupId, 'selected');
+    if (!selectedDir.startsWith(mediaDir + path.sep)) return null;
+
+    for (const extension of SELECTED_IMAGE_EXTENSIONS) {
+        const filePath = path.join(selectedDir, `${imageName}${extension}`);
+        if (fs.existsSync(filePath)) {
+            return path.posix.join(groupId, 'selected', `${imageName}${extension}`);
+        }
+    }
+
+    return null;
 }
 
 app.use('/media', (req, res, next) => {
@@ -114,6 +129,10 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
             groupsData[group.id] = {
                 name: group.name,
                 gps_track: JSON.parse(group.gps_track),
+                selected_images: {
+                    ground: getSelectedImagePath(group.id, 'ground'),
+                    underwater: getSelectedImagePath(group.id, 'underwater')
+                },
                 detections: []
             };
             const detections = await db.all("SELECT * FROM detections WHERE group_id = ?", group.id);
