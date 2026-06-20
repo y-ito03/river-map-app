@@ -38,13 +38,17 @@ async function ensureImportSchema(db) {
             lat REAL,
             lng REAL,
             timestamp_sec REAL,
-            thumbnail_path TEXT
+            thumbnail_path TEXT,
+            hidden INTEGER DEFAULT 0
         );
     `);
 
     const columns = await db.all('PRAGMA table_info(detections)');
     if (!columns.some(column => column.name === 'verified_class_name')) {
         await db.exec('ALTER TABLE detections ADD COLUMN verified_class_name TEXT');
+    }
+    if (!columns.some(column => column.name === 'hidden')) {
+        await db.exec('ALTER TABLE detections ADD COLUMN hidden INTEGER DEFAULT 0');
     }
 }
 

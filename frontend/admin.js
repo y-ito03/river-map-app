@@ -3,7 +3,9 @@ import './admin.css';
 const ADMIN_STORAGE_KEY = 'riverMapAdminCode';
 
 const loginPanel = document.getElementById('login-panel');
+const adminTabs = document.getElementById('admin-tabs');
 const postsPanel = document.getElementById('posts-panel');
+const detectionsPanel = document.getElementById('detections-panel');
 const adminCodeInput = document.getElementById('admin-code-input');
 const saveCodeBtn = document.getElementById('save-code-btn');
 const logoutBtn = document.getElementById('logout-btn');
@@ -13,8 +15,22 @@ const reloadBtn = document.getElementById('reload-btn');
 const statusFilter = document.getElementById('status-filter');
 const typeFilter = document.getElementById('type-filter');
 const summaryText = document.getElementById('summary-text');
+const detectionsList = document.getElementById('detections-list');
+const reloadDetectionsBtn = document.getElementById('reload-detections-btn');
+const detectionStatusFilter = document.getElementById('detection-status-filter');
+const detectionGroupFilter = document.getElementById('detection-group-filter');
+const detectionSummaryText = document.getElementById('detection-summary-text');
 
 let posts = [];
+let detections = [];
+let labelOptions = [];
+let activeView = 'posts';
+const detectionLabelAliases = {
+  ebi: 'エビ',
+  'ハグロトンボのヤゴ': 'ハグロトンボ',
+  'コオニヤンマのヤゴ': 'コオニヤンマ',
+  その他: 'その他の生き物',
+};
 
 function getAdminCode() {
   return localStorage.getItem(ADMIN_STORAGE_KEY) || '';
@@ -52,15 +68,34 @@ function toMediaPath(path) {
 
 function showLogin(message = '') {
   loginPanel.classList.remove('hidden');
+  adminTabs.classList.add('hidden');
   postsPanel.classList.add('hidden');
+  detectionsPanel.classList.add('hidden');
   logoutBtn.classList.add('hidden');
   loginMessage.textContent = message;
 }
 
-function showPosts() {
+function showAdmin() {
   loginPanel.classList.add('hidden');
-  postsPanel.classList.remove('hidden');
+  adminTabs.classList.remove('hidden');
   logoutBtn.classList.remove('hidden');
+  setActiveView(activeView);
+}
+
+function setActiveView(view) {
+  activeView = view;
+  postsPanel.classList.toggle('hidden', view !== 'posts');
+  detectionsPanel.classList.toggle('hidden', view !== 'detections');
+  adminTabs.querySelectorAll('.tab-btn').forEach((button) => {
+    button.classList.toggle('active', button.dataset.view === view);
+  });
+
+  if (view === 'posts' && posts.length === 0) {
+    loadPosts().catch((error) => showLogin(error.message));
+  }
+  if (view === 'detections' && detections.length === 0) {
+    loadDetections().catch((error) => showLogin(error.message));
+  }
 }
 
 async function fetchJson(url, options = {}) {
@@ -86,6 +121,21 @@ async function checkAdminCode() {
 
 function getPostTypeLabel(post) {
   return post.type === 'free' ? 'えらんだ場所' : 'ピン';
+}
+
+function parseVerifiedLabels(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.filter(Boolean);
+  } catch (error) {
+    // Older values may be stored as plain text.
+  }
+  return [value].filter(Boolean);
+}
+
+function normalizeDetectionLabel(value) {
+  return detectionLabelAliases[value] || value || '';
 }
 
 function getLocationLabel(post) {
@@ -170,6 +220,116 @@ async function loadPosts() {
   renderPosts();
 }
 
+function updateDetectionGroupFilter() {
+  const currentValue = detectionGroupFilter.value;
+  const groups = [...new Map(detections.map((detection) => [
+    detection.group_name || detection.group_id || '班不明',
+    detection.group_name || detection.group_id || '班不明',
+  ])).values()].sort((a, b) => a.localeCompare(b, 'ja'));
+
+  detectionGroupFilter.innerHTML = `
+    <option value="all">すべての班</option>
+    ${groups.map((groupName) => `<option value="${escapeHtml(groupName)}">${escapeHtml(groupName)}</option>`).join('')}
+  `;
+
+  if ([...detectionGroupFilter.options].some((option) => option.value === currentValue)) {
+    detectionGroupFilter.value = currentValue;
+  }
+}
+
+function getFilteredDetections() {
+  return detections.filter((detection) => {
+    const status = detectionStatusFilter.value;
+    const group = detectionGroupFilter.value;
+    const groupName = detection.group_name || detection.group_id || '班不明';
+
+    if (status === 'visible' && detection.hidden) return false;
+    if (status === 'hidden' && !detection.hidden) return false;
+    if (group !== 'all' && groupName !== group) return false;
+    return true;
+  });
+}
+
+function renderDetectionSelect(detection) {
+  const selectedName = normalizeDetectionLabel(detection.class_name);
+  return `
+    <select class="detection-name-select" data-detection-id="${escapeHtml(detection.id)}" aria-label="候補名">
+      ${labelOptions.map((name) => `
+        <option value="${escapeHtml(name)}" ${name === selectedName ? 'selected' : ''}>
+          ${escapeHtml(name)}
+        </option>
+      `).join('')}
+    </select>
+  `;
+}
+
+function renderDetections() {
+  const filteredDetections = getFilteredDetections();
+  const visibleCount = detections.filter((detection) => !detection.hidden).length;
+  const hiddenCount = detections.filter((detection) => detection.hidden).length;
+  detectionSummaryText.textContent = `全 ${detections.length}件 / 表示中 ${visibleCount}件 / 非表示 ${hiddenCount}件`;
+
+  if (filteredDetections.length === 0) {
+    detectionsList.innerHTML = '<p class="empty-text">表示する検出候補はありません。</p>';
+    return;
+  }
+
+  detectionsList.innerHTML = filteredDetections.map((detection) => {
+    const verifiedLabels = parseVerifiedLabels(detection.verified_class_name);
+    const displayClassName = normalizeDetectionLabel(detection.class_name);
+    const thumbnail = toMediaPath(detection.thumbnail_path);
+    const groupName = detection.group_name || detection.group_id || '班不明';
+    const timestamp = Number.isFinite(Number(detection.timestamp_sec))
+      ? `${Number(detection.timestamp_sec).toFixed(1)}秒`
+      : '時刻不明';
+
+    return `
+      <article class="detection-card ${detection.hidden ? 'is-hidden' : ''}">
+        <div class="detection-thumb">
+          ${thumbnail
+            ? `<a href="${escapeHtml(thumbnail)}" target="_blank" rel="noreferrer"><img src="${escapeHtml(thumbnail)}" alt="AI検出候補"></a>`
+            : '<span>画像なし</span>'}
+        </div>
+
+        <div class="detection-body">
+          <div class="post-card-header">
+            <div>
+              <span class="post-type">AI検出候補</span>
+              <h2>${escapeHtml(displayClassName || '候補名なし')}?</h2>
+            </div>
+            <span class="status-badge">${detection.hidden ? '非表示' : '表示中'}</span>
+          </div>
+
+          <p class="location-text">${escapeHtml(groupName)} / ${escapeHtml(timestamp)}</p>
+          ${verifiedLabels.length > 0
+            ? `<p class="verified-text">児童の確認: ${escapeHtml(verifiedLabels.join('、'))}</p>`
+            : '<p class="verified-text">児童の確認: まだ</p>'}
+
+          <div class="detection-edit-row">
+            ${renderDetectionSelect(detection)}
+            <button class="secondary-btn" data-action="save-detection-name" data-id="${escapeHtml(detection.id)}">候補名を保存</button>
+          </div>
+
+          <div class="actions">
+            <button class="secondary-btn" data-action="toggle-detection" data-id="${escapeHtml(detection.id)}" data-hidden="${detection.hidden ? '0' : '1'}">
+              ${detection.hidden ? '表示にもどす' : '非表示にする'}
+            </button>
+          </div>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+async function loadDetections() {
+  detectionSummaryText.textContent = '読み込み中...';
+  const data = await fetchJson('/api/admin/detections');
+  detections = data.detections || [];
+  labelOptions = data.label_options || [];
+  updateDetectionGroupFilter();
+  renderDetections();
+}
+
 async function handleLogin() {
   const code = adminCodeInput.value.trim();
   if (!code) {
@@ -180,12 +340,31 @@ async function handleLogin() {
   setAdminCode(code);
   try {
     await checkAdminCode();
-    showPosts();
-    await loadPosts();
+    showAdmin();
   } catch (error) {
     clearAdminCode();
     showLogin(error.message);
   }
+}
+
+async function toggleDetection(id, hidden) {
+  await fetchJson(`/api/admin/detections/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ hidden }),
+  });
+  await loadDetections();
+}
+
+async function saveDetectionName(id) {
+  const select = [...detectionsList.querySelectorAll('.detection-name-select')]
+    .find((element) => element.dataset.detectionId === id);
+  if (!select) return;
+
+  await fetchJson(`/api/admin/detections/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ class_name: select.value }),
+  });
+  await loadDetections();
 }
 
 async function togglePost(type, id, hidden) {
@@ -217,8 +396,18 @@ logoutBtn.addEventListener('click', () => {
 reloadBtn.addEventListener('click', () => {
   loadPosts().catch((error) => showLogin(error.message));
 });
+reloadDetectionsBtn.addEventListener('click', () => {
+  loadDetections().catch((error) => showLogin(error.message));
+});
 statusFilter.addEventListener('change', renderPosts);
 typeFilter.addEventListener('change', renderPosts);
+detectionStatusFilter.addEventListener('change', renderDetections);
+detectionGroupFilter.addEventListener('change', renderDetections);
+adminTabs.addEventListener('click', (event) => {
+  const button = event.target.closest('.tab-btn');
+  if (!button) return;
+  setActiveView(button.dataset.view);
+});
 postsList.addEventListener('click', (event) => {
   const button = event.target.closest('button[data-action]');
   if (!button) return;
@@ -235,6 +424,22 @@ postsList.addEventListener('click', (event) => {
     button.disabled = false;
   });
 });
+detectionsList.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+
+  const { action, id, hidden } = button.dataset;
+  button.disabled = true;
+
+  const task = action === 'save-detection-name'
+    ? saveDetectionName(id)
+    : toggleDetection(id, hidden === '1');
+
+  task.catch((error) => {
+    window.alert(error.message);
+    button.disabled = false;
+  });
+});
 
 async function init() {
   const code = getAdminCode();
@@ -245,8 +450,7 @@ async function init() {
 
   try {
     await checkAdminCode();
-    showPosts();
-    await loadPosts();
+    showAdmin();
   } catch (error) {
     clearAdminCode();
     showLogin(error.message);

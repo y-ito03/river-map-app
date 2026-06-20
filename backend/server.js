@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 8000;
 const ACCESS_CODE = process.env.ACCESS_CODE || '';
 const ACCESS_CODE_REQUIRED = process.env.ACCESS_CODE_REQUIRED === 'true';
 const ADMIN_CODE = process.env.ADMIN_CODE || ACCESS_CODE;
-const DETECTION_LABEL_OPTIONS = new Set([
+const DETECTION_LABEL_OPTIONS = [
     'サワガニ',
     'アカハライモリ',
     'ハグロトンボ',
@@ -21,7 +21,8 @@ const DETECTION_LABEL_OPTIONS = new Set([
     'カワムツ',
     'その他の生き物',
     '生き物なし'
-]);
+];
+const DETECTION_LABEL_OPTION_SET = new Set(DETECTION_LABEL_OPTIONS);
 const mediaDir = path.join(__dirname, 'media');
 const uploadDir = path.join(mediaDir, 'uploads');
 const databaseFile = path.join(__dirname, 'database.sqlite');
@@ -135,7 +136,7 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
                 },
                 detections: []
             };
-            const detections = await db.all("SELECT * FROM detections WHERE group_id = ?", group.id);
+            const detections = await db.all("SELECT * FROM detections WHERE group_id = ? AND COALESCE(hidden, 0) = 0", group.id);
             for (const det of detections) {
                 // image_url も一緒に取得するように追加
                 const posts = await db.all(
@@ -229,7 +230,7 @@ app.patch('/api/detections/:id/verification', requireAccess, async (req, res) =>
         .filter(Boolean)
     )];
 
-    if (creatures.length === 0 || creatures.some(creature => !DETECTION_LABEL_OPTIONS.has(creature))) {
+    if (creatures.length === 0 || creatures.some(creature => !DETECTION_LABEL_OPTION_SET.has(creature))) {
         return res.status(400).json({ error: "生き物の名前が正しくありません" });
     }
 
@@ -335,6 +336,76 @@ app.patch('/api/admin/posts/:type/:id', requireAdmin, async (req, res) => {
     }
 });
 
+app.get('/api/admin/detections', requireAdmin, async (req, res) => {
+    try {
+        const detections = await db.all(`
+            SELECT
+                d.id,
+                d.group_id,
+                d.class_name,
+                d.verified_class_name,
+                d.confidence,
+                d.lat,
+                d.lng,
+                d.timestamp_sec,
+                d.thumbnail_path,
+                COALESCE(d.hidden, 0) AS hidden,
+                g.name AS group_name
+            FROM detections d
+            LEFT JOIN groups g ON g.id = d.group_id
+            ORDER BY g.name ASC, d.timestamp_sec ASC, d.id ASC
+        `);
+
+        res.json({ detections, label_options: DETECTION_LABEL_OPTIONS });
+    } catch (err) {
+        console.error("管理用検出候補一覧の取得エラー:", err);
+        res.status(500).json({ error: "検出候補一覧の取得に失敗しました" });
+    }
+});
+
+app.patch('/api/admin/detections/:id', requireAdmin, async (req, res) => {
+    const detectionId = req.params.id;
+    const updates = [];
+    const values = [];
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'hidden')) {
+        updates.push('hidden = ?');
+        values.push(req.body.hidden ? 1 : 0);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'class_name')) {
+        const className = String(req.body.class_name || '').trim();
+        if (!DETECTION_LABEL_OPTION_SET.has(className)) {
+            return res.status(400).json({ error: "候補名が正しくありません" });
+        }
+
+        updates.push('class_name = ?');
+        values.push(className);
+    }
+
+    if (updates.length === 0) {
+        return res.status(400).json({ error: "更新内容がありません" });
+    }
+
+    values.push(detectionId);
+
+    try {
+        const result = await db.run(
+            `UPDATE detections SET ${updates.join(', ')} WHERE id = ?`,
+            values
+        );
+
+        if (result.changes === 0) {
+            return res.status(404).json({ error: "検出候補が見つかりません" });
+        }
+
+        res.json({ status: "success" });
+    } catch (err) {
+        console.error("検出候補の更新エラー:", err);
+        res.status(500).json({ error: "検出候補の更新に失敗しました" });
+    }
+});
+
 async function deleteUploadFile(relativePath) {
     if (!relativePath) return;
 
@@ -412,6 +483,7 @@ async function ensureSchema() {
         );
     `);
     await addColumnIfMissing('detections', 'verified_class_name', 'TEXT');
+    await addColumnIfMissing('detections', 'hidden', 'INTEGER DEFAULT 0');
     await addColumnIfMissing('user_posts', 'concept_image_url', 'TEXT');
     await addColumnIfMissing('user_posts', 'hidden', 'INTEGER DEFAULT 0');
     await addColumnIfMissing('free_posts', 'class_number', 'INTEGER');

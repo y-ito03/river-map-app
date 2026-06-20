@@ -112,6 +112,22 @@ button:disabled {
   margin-bottom: 12px;
 }
 
+.admin-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tab-btn {
+  background: #e7eee9;
+  color: #1f2a24;
+}
+
+.tab-btn.active {
+  background: #2e7d32;
+  color: #fff;
+}
+
 .summary-text {
   margin: 0 0 12px;
   color: #4d5b52;
@@ -123,13 +139,57 @@ button:disabled {
   gap: 14px;
 }
 
-.post-card {
+.detections-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 14px;
+}
+
+.post-card,
+.detection-card {
   padding: 16px;
 }
 
-.post-card.is-hidden {
+.post-card.is-hidden,
+.detection-card.is-hidden {
   opacity: .72;
   background: #f8f8f8;
+}
+
+.detection-card {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 14px;
+  background: #fff;
+  border: 1px solid #dde6df;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+
+.detection-thumb {
+  min-height: 112px;
+  border: 1px solid #dde6df;
+  border-radius: 6px;
+  background: #eef3f0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #5d6a61;
+}
+
+.detection-thumb a,
+.detection-thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.detection-thumb img {
+  object-fit: cover;
+}
+
+.detection-body {
+  min-width: 0;
 }
 
 .post-card-header {
@@ -173,6 +233,12 @@ button:disabled {
   font-size: .92rem;
 }
 
+.verified-text {
+  color: #2e7d32;
+  font-size: .92rem;
+  font-weight: 700;
+}
+
 .comment-text {
   white-space: pre-wrap;
   line-height: 1.55;
@@ -206,6 +272,19 @@ button:disabled {
   justify-content: flex-end;
 }
 
+.detection-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.detection-name-select {
+  min-width: 150px;
+  flex: 1;
+}
+
 .empty-text {
   padding: 20px;
   background: #fff;
@@ -224,10 +303,27 @@ button:disabled {
     flex-direction: column;
   }
 
+  .admin-tabs {
+    flex-direction: column;
+  }
+
   .filter-group,
-  .login-row {
+  .login-row,
+  .detection-edit-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .detections-list {
+    grid-template-columns: 1fr;
+  }
+
+  .detection-card {
+    grid-template-columns: 1fr;
+  }
+
+  .detection-thumb {
+    height: 180px;
   }
 
   .actions {

@@ -9,7 +9,7 @@
   <div id="admin-app">
     <header class="admin-header">
       <div>
-        <h1>投稿管理</h1>
+        <h1>管理画面</h1>
         <p>岩倉川の調査記録</p>
       </div>
       <button id="logout-btn" class="secondary-btn hidden">コードを消す</button>
@@ -25,6 +25,11 @@
         </div>
         <p id="login-message" class="message"></p>
       </section>
+
+      <nav id="admin-tabs" class="admin-tabs hidden" aria-label="管理メニュー">
+        <button type="button" class="tab-btn active" data-view="posts">投稿管理</button>
+        <button type="button" class="tab-btn" data-view="detections">AI検出候補</button>
+      </nav>
 
       <section id="posts-panel" class="hidden">
         <div class="toolbar">
@@ -45,6 +50,25 @@
 
         <p id="summary-text" class="summary-text"></p>
         <div id="posts-list" class="posts-list"></div>
+      </section>
+
+      <section id="detections-panel" class="hidden">
+        <div class="toolbar">
+          <div class="filter-group">
+            <select id="detection-status-filter" aria-label="検出候補の表示状態">
+              <option value="all">すべて</option>
+              <option value="visible">表示中</option>
+              <option value="hidden">非表示</option>
+            </select>
+            <select id="detection-group-filter" aria-label="班">
+              <option value="all">すべての班</option>
+            </select>
+          </div>
+          <button id="reload-detections-btn">再読み込み</button>
+        </div>
+
+        <p id="detection-summary-text" class="summary-text"></p>
+        <div id="detections-list" class="detections-list"></div>
       </section>
     </main>
   </div>

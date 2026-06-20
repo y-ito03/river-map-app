@@ -33,7 +33,8 @@ async function setupDatabase() {
             lat REAL,
             lng REAL,
             timestamp_sec REAL,
-            thumbnail_path TEXT
+            thumbnail_path TEXT,
+            hidden INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS user_posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
