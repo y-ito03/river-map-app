@@ -7,7 +7,7 @@ const { spawnSync } = require('child_process');
 function usage() {
     console.log(`
 Usage:
-  node update_gps_tracks_batch.js <gps-csv-folder> [--dry-run] [--keep-outliers]
+  node update_gps_tracks_batch.js <gps-csv-folder> [--dry-run] [--keep-outliers] [--radius <meters>]
 
 File name examples:
   D組E班_gps.csv
@@ -17,6 +17,7 @@ File name examples:
 Examples:
   node update_gps_tracks_batch.js "C:\\Users\\abono\\Downloads\\gps_csv" --dry-run
   node update_gps_tracks_batch.js "C:\\Users\\abono\\Downloads\\gps_csv"
+  node update_gps_tracks_batch.js "C:\\Users\\abono\\Downloads\\gps_csv" --radius 20
 `);
 }
 
@@ -31,7 +32,15 @@ function main() {
     const args = process.argv.slice(2);
     const dryRun = args.includes('--dry-run');
     const keepOutliers = args.includes('--keep-outliers');
+    const radiusArgIndex = args.findIndex(arg => arg === '--radius' || arg.startsWith('--radius='));
+    const radiusValue = radiusArgIndex >= 0
+        ? (args[radiusArgIndex].includes('=') ? args[radiusArgIndex].split('=')[1] : args[radiusArgIndex + 1])
+        : undefined;
     const positional = args.filter(arg => !arg.startsWith('--'));
+    if (radiusArgIndex >= 0 && args[radiusArgIndex] === '--radius') {
+        const valueIndex = positional.indexOf(args[radiusArgIndex + 1]);
+        if (valueIndex >= 0) positional.splice(valueIndex, 1);
+    }
 
     if (positional.length < 1 || args.includes('--help')) {
         usage();
@@ -74,6 +83,7 @@ function main() {
         const childArgs = [updateScript, selector, filePath];
         if (dryRun) childArgs.push('--dry-run');
         if (keepOutliers) childArgs.push('--keep-outliers');
+        if (radiusValue) childArgs.push('--radius', radiusValue);
 
         const result = spawnSync(process.execPath, childArgs, {
             stdio: 'inherit',

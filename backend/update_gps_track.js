@@ -15,7 +15,7 @@ const MAP_SOURCE_BOUNDS = {
 const MAP_CENTER_LAT = (MAP_SOURCE_BOUNDS.north + MAP_SOURCE_BOUNDS.south) / 2;
 const METERS_PER_DEGREE_LAT = 111320;
 const METERS_PER_DEGREE_LNG = METERS_PER_DEGREE_LAT * Math.cos(MAP_CENTER_LAT * Math.PI / 180);
-const RIVER_CORRIDOR_RADIUS_M = 45;
+const DEFAULT_RIVER_CORRIDOR_RADIUS_M = 25;
 const RIVER_CENTERLINE = [
     [35.06678, 135.78470],
     [35.06635, 135.78472],
@@ -28,11 +28,12 @@ const RIVER_CENTERLINE = [
 function usage() {
     console.log(`
 Usage:
-  node update_gps_track.js <group-id-or-name> <gps-csv-path> [--dry-run] [--keep-outliers]
+  node update_gps_track.js <group-id-or-name> <gps-csv-path> [--dry-run] [--keep-outliers] [--radius <meters>]
 
 Examples:
   node update_gps_track.js "D組D班" "C:\\Users\\abono\\Downloads\\D組D班_gps.csv" --dry-run
   node update_gps_track.js "D組D班" "C:\\Users\\abono\\Downloads\\D組D班_gps.csv"
+  node update_gps_track.js "D組D班" "C:\\Users\\abono\\Downloads\\D組D班_gps.csv" --radius 20
 `);
 }
 
@@ -109,8 +110,8 @@ function isMapPoint(lat, lng) {
         && lng <= MAP_SOURCE_BOUNDS.east + margin;
 }
 
-function isRiverCorridorPoint(lat, lng) {
-    return isMapPoint(lat, lng) && distanceToRiverMeters(lat, lng) <= RIVER_CORRIDOR_RADIUS_M;
+function isRiverCorridorPoint(lat, lng, radiusMeters) {
+    return isMapPoint(lat, lng) && distanceToRiverMeters(lat, lng) <= radiusMeters;
 }
 
 function readGpsCsv(filePath) {
@@ -159,7 +160,18 @@ async function main() {
     const args = process.argv.slice(2);
     const dryRun = args.includes('--dry-run');
     const keepOutliers = args.includes('--keep-outliers');
+    const radiusArgIndex = args.findIndex(arg => arg === '--radius' || arg.startsWith('--radius='));
+    const radiusValue = radiusArgIndex >= 0
+        ? (args[radiusArgIndex].includes('=') ? args[radiusArgIndex].split('=')[1] : args[radiusArgIndex + 1])
+        : undefined;
+    const radiusMeters = Number.isFinite(Number(radiusValue))
+        ? Number(radiusValue)
+        : DEFAULT_RIVER_CORRIDOR_RADIUS_M;
     const positional = args.filter(arg => !arg.startsWith('--'));
+    if (radiusArgIndex >= 0 && args[radiusArgIndex] === '--radius') {
+        const valueIndex = positional.indexOf(args[radiusArgIndex + 1]);
+        if (valueIndex >= 0) positional.splice(valueIndex, 1);
+    }
 
     if (positional.length < 2 || args.includes('--help')) {
         usage();
@@ -175,7 +187,7 @@ async function main() {
     const csvPoints = await readGpsCsv(resolvedCsvPath);
     const filteredPoints = keepOutliers
         ? csvPoints
-        : csvPoints.filter(point => isRiverCorridorPoint(point[0], point[1]));
+        : csvPoints.filter(point => isRiverCorridorPoint(point[0], point[1], radiusMeters));
 
     if (filteredPoints.length < 2) {
         throw new Error(`有効なGPS点が少なすぎます。CSV点数: ${csvPoints.length}, 補正後: ${filteredPoints.length}`);
@@ -194,6 +206,7 @@ async function main() {
         console.log(`target group: ${group.name} (${group.id})`);
         console.log(`csv points: ${csvPoints.length}`);
         console.log(`filtered points: ${filteredPoints.length}`);
+        console.log(`river corridor radius: ${keepOutliers ? 'disabled' : `${radiusMeters}m`}`);
         console.log(`old gps_track points: ${Array.isArray(oldPoints) ? oldPoints.length : 0}`);
 
         if (dryRun) {
