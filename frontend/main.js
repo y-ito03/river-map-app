@@ -207,6 +207,9 @@ const speciesIconMap = [
     { keywords: ['カワニナ'], url: '/species-icons/kawanina.svg' },
     { keywords: ['エビ', 'ebi'], url: '/species-icons/ebi.svg' },
     { keywords: ['カワムツ'], url: '/species-icons/kawamutsu.svg' },
+    { keywords: ['ドンコ'], url: '/species-icons/donko.svg' },
+    { keywords: ['ヨシノボリ'], url: '/species-icons/yoshinobori.svg' },
+    { keywords: ['ドジョウ'], url: '/species-icons/dojo.svg' },
     { keywords: ['その他の生き物', '生き物なし'], url: '/species-icons/other.svg' }
 ];
 const detectionLabelOptions = [
@@ -217,6 +220,9 @@ const detectionLabelOptions = [
     'カワニナ',
     'エビ',
     'カワムツ',
+    'ドンコ',
+    'ヨシノボリ',
+    'ドジョウ',
     'その他の生き物',
     '生き物なし'
 ];
@@ -1038,22 +1044,65 @@ function updateSidebarMenu() {
     const sidebarList = document.querySelector('#sidebar ul');
     sidebarList.innerHTML = '';
 
-    Object.entries(surveyData).forEach(([groupId, group]) => {
-        const li = document.createElement('li');
-        const btn = document.createElement('button');
-        btn.className = 'nav-btn group-btn';
-        btn.dataset.group = groupId;
-        btn.innerText = `${getDisplayGroupName(group.name)} の記録`;
+    const liGroups = document.createElement('li');
+    liGroups.className = 'menu-groups';
 
-        btn.addEventListener('click', () => {
-            renderGroupData(groupId);
-            document.querySelector('.title').innerText = `${APP_TITLE} - ${getDisplayGroupName(group.name)}`;
-            document.getElementById('sidebar').classList.add('hidden');
+    const groupsDetails = document.createElement('details');
+    groupsDetails.className = 'menu-details group-menu-details';
+    groupsDetails.open = currentGroupId && currentGroupId !== 'all-tracks' && currentGroupId !== 'heatmap';
+
+    const groupsSummary = document.createElement('summary');
+    groupsSummary.innerText = '班の記録を選ぶ';
+    groupsDetails.appendChild(groupsSummary);
+
+    Object.entries(classNames).forEach(([classNumber, className]) => {
+        const classGroups = getSortedGroupEntries(String(classNumber));
+        if (classGroups.length === 0) return;
+
+        const classDetails = document.createElement('details');
+        classDetails.className = 'menu-details class-menu-details';
+        classDetails.open = currentGroupId && surveyData[currentGroupId]
+            ? parseGroupInfo(surveyData[currentGroupId].name).classNumber === Number(classNumber)
+            : false;
+
+        const classSummary = document.createElement('summary');
+        classSummary.innerText = className;
+        classDetails.appendChild(classSummary);
+
+        const groupList = document.createElement('div');
+        groupList.className = 'group-menu-list';
+
+        classGroups.forEach(([groupId, group]) => {
+            const btn = document.createElement('button');
+            btn.className = 'nav-btn group-btn';
+            btn.dataset.group = groupId;
+            btn.innerText = `${getDisplayGroupName(group.name)} の記録`;
+
+            btn.addEventListener('click', () => {
+                renderGroupData(groupId);
+                document.querySelector('.title').innerText = `${APP_TITLE} - ${getDisplayGroupName(group.name)}`;
+                document.getElementById('sidebar').classList.add('hidden');
+            });
+
+            groupList.appendChild(btn);
         });
 
+        classDetails.appendChild(groupList);
+        groupsDetails.appendChild(classDetails);
+    });
+
+    liGroups.appendChild(groupsDetails);
+    sidebarList.appendChild(liGroups);
+
+    if (sidebarList.children.length === 0) {
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.className = 'nav-btn';
+        btn.disabled = true;
+        btn.innerText = '表示できる班がありません';
         li.appendChild(btn);
         sidebarList.appendChild(li);
-    });
+    }
 
     const liAllTracks = document.createElement('li');
     const btnAllTracks = document.createElement('button');

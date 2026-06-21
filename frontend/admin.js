@@ -326,9 +326,19 @@ function renderDetectionSelect(detection) {
 
 function renderDetections() {
   const filteredDetections = getFilteredDetections();
-  const visibleCount = detections.filter((detection) => !detection.hidden).length;
-  const hiddenCount = detections.filter((detection) => detection.hidden).length;
-  detectionSummaryText.textContent = `全 ${detections.length}件 / 表示中 ${visibleCount}件 / 非表示 ${hiddenCount}件`;
+  const selectedGroup = detectionGroupFilter.value;
+  const summaryTargetDetections = selectedGroup === 'all'
+    ? detections
+    : detections.filter((detection) => {
+        const groupName = detection.group_name || detection.group_id || '班不明';
+        return groupName === selectedGroup;
+      });
+  const visibleCount = summaryTargetDetections.filter((detection) => !detection.hidden).length;
+  const hiddenCount = summaryTargetDetections.filter((detection) => detection.hidden).length;
+  const statusSuffix = detectionStatusFilter.value === 'all'
+    ? ''
+    : ` / 現在表示 ${filteredDetections.length}件`;
+  detectionSummaryText.textContent = `${selectedGroup === 'all' ? '全班' : selectedGroup}：全 ${summaryTargetDetections.length}件 / 表示中 ${visibleCount}件 / 非表示 ${hiddenCount}件${statusSuffix}`;
 
   if (filteredDetections.length === 0) {
     detectionsList.innerHTML = '<p class="empty-text">表示する検出候補はありません。</p>';
