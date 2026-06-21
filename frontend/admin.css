@@ -138,26 +138,31 @@ button:disabled {
   color: #4d5b52;
 }
 
-.add-detection-panel {
+.add-detection-panel,
+.selected-image-panel {
   margin-bottom: 16px;
 }
 
-.add-detection-form {
+.add-detection-form,
+.selected-image-form {
   display: grid;
   gap: 12px;
 }
 
-.add-detection-form label {
+.add-detection-form label,
+.selected-image-form label {
   display: grid;
   gap: 6px;
   font-weight: 700;
 }
 
-.add-detection-form > label {
+.add-detection-form > label,
+.selected-image-form > label {
   min-width: 220px;
 }
 
-.add-detection-form {
+.add-detection-form,
+.selected-image-form {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   align-items: end;
 }

@@ -24,6 +24,9 @@ const addDetectionForm = document.getElementById('add-detection-form');
 const addDetectionGroup = document.getElementById('add-detection-group');
 const addDetectionClass = document.getElementById('add-detection-class');
 const addDetectionMessage = document.getElementById('add-detection-message');
+const selectedImageForm = document.getElementById('selected-image-form');
+const selectedImageGroup = document.getElementById('selected-image-group');
+const selectedImageMessage = document.getElementById('selected-image-message');
 
 let posts = [];
 let detections = [];
@@ -261,12 +264,20 @@ function updateDetectionGroupFilter() {
 function updateAddDetectionFormOptions() {
   const selectedGroup = addDetectionGroup.value;
   const selectedClass = addDetectionClass.value;
+  const selectedImageGroupValue = selectedImageGroup.value;
+
+  const groupOptions = groups.map((group) => `
+      <option value="${escapeHtml(group.id)}">${escapeHtml(group.name || group.id)}</option>
+    `).join('');
 
   addDetectionGroup.innerHTML = `
     <option value="">班を選ぶ</option>
-    ${groups.map((group) => `
-      <option value="${escapeHtml(group.id)}">${escapeHtml(group.name || group.id)}</option>
-    `).join('')}
+    ${groupOptions}
+  `;
+
+  selectedImageGroup.innerHTML = `
+    <option value="">班を選ぶ</option>
+    ${groupOptions}
   `;
 
   addDetectionClass.innerHTML = `
@@ -278,6 +289,9 @@ function updateAddDetectionFormOptions() {
 
   if ([...addDetectionGroup.options].some((option) => option.value === selectedGroup)) {
     addDetectionGroup.value = selectedGroup;
+  }
+  if ([...selectedImageGroup.options].some((option) => option.value === selectedImageGroupValue)) {
+    selectedImageGroup.value = selectedImageGroupValue;
   }
   if ([...addDetectionClass.options].some((option) => option.value === selectedClass)) {
     addDetectionClass.value = selectedClass;
@@ -439,6 +453,29 @@ async function addDetection(event) {
   }
 }
 
+async function saveSelectedImage(event) {
+  event.preventDefault();
+
+  const formData = new FormData(selectedImageForm);
+  const groupId = formData.get('group_id');
+  if (!groupId || !formData.get('image')) {
+    selectedImageMessage.textContent = '班と画像を選んでください。';
+    return;
+  }
+
+  selectedImageMessage.textContent = '保存中...';
+
+  try {
+    await fetchForm(`/api/admin/groups/${encodeURIComponent(groupId)}/selected-image`, formData);
+    selectedImageForm.reset();
+    selectedImageGroup.value = groupId;
+    selectedImageMessage.textContent = '画像を保存しました。';
+    await loadDetections();
+  } catch (error) {
+    selectedImageMessage.textContent = error.message;
+  }
+}
+
 async function togglePost(type, id, hidden) {
   await fetchJson(`/api/admin/posts/${type}/${id}`, {
     method: 'PATCH',
@@ -476,6 +513,7 @@ typeFilter.addEventListener('change', renderPosts);
 detectionStatusFilter.addEventListener('change', renderDetections);
 detectionGroupFilter.addEventListener('change', renderDetections);
 addDetectionForm.addEventListener('submit', addDetection);
+selectedImageForm.addEventListener('submit', saveSelectedImage);
 adminTabs.addEventListener('click', (event) => {
   const button = event.target.closest('.tab-btn');
   if (!button) return;

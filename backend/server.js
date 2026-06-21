@@ -139,6 +139,7 @@ const postUpload = upload.fields([
     { name: 'conceptImage', maxCount: 1 }
 ]);
 const manualDetectionUpload = upload.single('thumbnail');
+const selectedImageUpload = upload.single('image');
 
 let db;
 
@@ -455,6 +456,58 @@ app.post('/api/admin/detections', requireAdmin, manualDetectionUpload, async (re
     } catch (err) {
         console.error("検出候補の追加エラー:", err);
         res.status(500).json({ error: "検出候補の追加に失敗しました" });
+    }
+});
+
+app.post('/api/admin/groups/:id/selected-image', requireAdmin, selectedImageUpload, async (req, res) => {
+    const groupId = req.params.id;
+    const imageType = String(req.body.type || '').trim();
+
+    if (!['ground', 'underwater'].includes(imageType)) {
+        return res.status(400).json({ error: "画像の種類が正しくありません" });
+    }
+
+    if (!req.file) {
+        return res.status(400).json({ error: "画像ファイルを選んでください" });
+    }
+
+    try {
+        const group = await db.get("SELECT id FROM groups WHERE id = ?", groupId);
+        if (!group) {
+            return res.status(404).json({ error: "班が見つかりません" });
+        }
+
+        const selectedDir = path.resolve(mediaDir, groupId, 'selected');
+        if (!selectedDir.startsWith(mediaDir + path.sep)) {
+            return res.status(403).json({ error: "保存できないパスです" });
+        }
+
+        await fs.promises.mkdir(selectedDir, { recursive: true });
+
+        for (const extension of SELECTED_IMAGE_EXTENSIONS) {
+            const existingPath = path.join(selectedDir, `${imageType}${extension}`);
+            try {
+                await fs.promises.unlink(existingPath);
+            } catch (err) {
+                if (err.code !== 'ENOENT') throw err;
+            }
+        }
+
+        const extension = path.extname(req.file.originalname).toLowerCase() || '.jpg';
+        const safeExtension = SELECTED_IMAGE_EXTENSIONS.includes(extension) ? extension : '.jpg';
+        const destinationPath = path.join(selectedDir, `${imageType}${safeExtension}`);
+        await fs.promises.rename(req.file.path, destinationPath);
+
+        res.json({
+            status: "success",
+            image_url: path.posix.join(groupId, 'selected', `${imageType}${safeExtension}`)
+        });
+    } catch (err) {
+        console.error("班代表画像の保存エラー:", err);
+        if (req.file) {
+            await fs.promises.unlink(req.file.path).catch(() => {});
+        }
+        res.status(500).json({ error: "画像の保存に失敗しました" });
     }
 });
 
