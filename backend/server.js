@@ -31,6 +31,27 @@ const mediaDir = path.join(__dirname, 'media');
 const uploadDir = path.join(mediaDir, 'uploads');
 const databaseFile = path.join(__dirname, 'database.sqlite');
 const SELECTED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
+const MAP_SOURCE_BOUNDS = {
+    north: 35.0668688174732,
+    south: 35.06464445892178,
+    west: 135.78416397658356 + 0.00006,
+    east: 135.78518787088882 + 0.00006
+};
+const MAP_CENTER_LAT = (MAP_SOURCE_BOUNDS.north + MAP_SOURCE_BOUNDS.south) / 2;
+const METERS_PER_DEGREE_LAT = 111320;
+const METERS_PER_DEGREE_LNG = METERS_PER_DEGREE_LAT * Math.cos(MAP_CENTER_LAT * Math.PI / 180);
+const RIVER_CORRIDOR_RADIUS_M = 45;
+const RIVER_CENTERLINE = [
+    [35.06678, 135.78470],
+    [35.06635, 135.78472],
+    [35.06595, 135.78480],
+    [35.06555, 135.78478],
+    [35.06515, 135.78472],
+    [35.06475, 135.78466]
+];
+const CLASS_LETTER_TO_NUMBER = { d: 1, h: 2, l: 3 };
+const CLASS_NAME_TO_NUMBER = { davis: 1, hardy: 2, learned: 3 };
+const TEAM_LETTER_TO_NUMBER = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7 };
 
 app.use(express.json());
 
@@ -74,28 +95,167 @@ function getSelectedImagePath(groupId, imageName) {
     return null;
 }
 
-function getDefaultGroupPoint(gpsTrack) {
-    let points = [];
-    try {
-        points = JSON.parse(gpsTrack || '[]');
-    } catch (error) {
-        points = [];
+function parseGroupInfo(groupName) {
+    const name = String(groupName || '');
+    const classTeamLetterMatch = name.match(/([DHL])\s*組.*?([A-G])\s*班/i);
+    if (classTeamLetterMatch) {
+        return {
+            classNumber: CLASS_LETTER_TO_NUMBER[classTeamLetterMatch[1].toLowerCase()] || 1,
+            teamNumber: TEAM_LETTER_TO_NUMBER[classTeamLetterMatch[2].toLowerCase()] || 1
+        };
     }
 
-    const validPoints = points.filter(point => (
+    const reversedLetterMatch = name.match(/([DHL])\s*班.*?([A-G])\s*組/i);
+    if (reversedLetterMatch) {
+        return {
+            classNumber: CLASS_LETTER_TO_NUMBER[reversedLetterMatch[1].toLowerCase()] || 1,
+            teamNumber: TEAM_LETTER_TO_NUMBER[reversedLetterMatch[2].toLowerCase()] || 1
+        };
+    }
+
+    const japaneseMatch = name.match(/(\d+)\s*組.*?(\d+)\s*班/);
+    if (japaneseMatch) {
+        return {
+            classNumber: Number(japaneseMatch[1]) || 1,
+            teamNumber: Number(japaneseMatch[2]) || 1
+        };
+    }
+
+    const englishMatch = name.match(/(Davis|Hardy|Learned).*?([A-G]|\d+)\s*班/i);
+    if (englishMatch) {
+        const rawTeam = englishMatch[2];
+        return {
+            classNumber: CLASS_NAME_TO_NUMBER[englishMatch[1].toLowerCase()] || 1,
+            teamNumber: /^[A-G]$/i.test(rawTeam)
+                ? TEAM_LETTER_TO_NUMBER[rawTeam.toLowerCase()] || 1
+                : Number(rawTeam) || 1
+        };
+    }
+
+    const teamMatch = name.match(/(\d+)\s*班/);
+    return {
+        classNumber: 1,
+        teamNumber: teamMatch ? Number(teamMatch[1]) || 1 : 1
+    };
+}
+
+function isMapPoint(lat, lng) {
+    const margin = 0.00035;
+    return Number.isFinite(lat)
+        && Number.isFinite(lng)
+        && lat <= MAP_SOURCE_BOUNDS.north + margin
+        && lat >= MAP_SOURCE_BOUNDS.south - margin
+        && lng >= MAP_SOURCE_BOUNDS.west - margin
+        && lng <= MAP_SOURCE_BOUNDS.east + margin;
+}
+
+function toLocalMeters(point) {
+    return {
+        x: (point[1] - MAP_SOURCE_BOUNDS.west) * METERS_PER_DEGREE_LNG,
+        y: (point[0] - MAP_SOURCE_BOUNDS.south) * METERS_PER_DEGREE_LAT
+    };
+}
+
+function distancePointToSegmentMeters(point, segmentStart, segmentEnd) {
+    const p = toLocalMeters(point);
+    const a = toLocalMeters(segmentStart);
+    const b = toLocalMeters(segmentEnd);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared === 0
+        ? 0
+        : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared));
+    const closestX = a.x + dx * t;
+    const closestY = a.y + dy * t;
+
+    return Math.hypot(p.x - closestX, p.y - closestY);
+}
+
+function distanceToRiverMeters(lat, lng) {
+    let minDistance = Infinity;
+    const point = [lat, lng];
+    for (let index = 0; index < RIVER_CENTERLINE.length - 1; index += 1) {
+        minDistance = Math.min(
+            minDistance,
+            distancePointToSegmentMeters(point, RIVER_CENTERLINE[index], RIVER_CENTERLINE[index + 1])
+        );
+    }
+    return minDistance;
+}
+
+function isRiverCorridorPoint(lat, lng) {
+    return isMapPoint(lat, lng) && distanceToRiverMeters(lat, lng) <= RIVER_CORRIDOR_RADIUS_M;
+}
+
+function parseGpsTrack(gpsTrack) {
+    try {
+        const points = JSON.parse(gpsTrack || '[]');
+        return Array.isArray(points) ? points : [];
+    } catch (error) {
+        return [];
+    }
+}
+
+function getFallbackTrack(groupName) {
+    const { classNumber, teamNumber } = parseGroupInfo(groupName);
+    const teamIndex = Math.max(1, Math.min(7, teamNumber));
+    const startLat = 35.06608 - (teamIndex - 1) * 0.0002;
+    const endLat = Math.max(35.06472, startLat - 0.00068);
+    const classLngOffset = { 1: -0.000035, 2: 0, 3: 0.000035 }[classNumber] || 0;
+    const points = [];
+
+    for (let index = 0; index < 42; index += 1) {
+        const t = index / 41;
+        const lat = startLat + (endLat - startLat) * t;
+        const lng = 135.78473
+            + classLngOffset
+            + Math.sin(t * Math.PI * 1.7 + teamIndex * 0.45) * 0.00008
+            + Math.sin(t * Math.PI * 5) * 0.000025;
+        points.push([lat, lng]);
+    }
+
+    return points;
+}
+
+function getUsableTrack(gpsTrack, groupName) {
+    const validPoints = parseGpsTrack(gpsTrack).filter(point => (
         Array.isArray(point)
         && point.length >= 2
         && Number.isFinite(Number(point[0]))
         && Number.isFinite(Number(point[1]))
-    ));
+    )).map(point => [Number(point[0]), Number(point[1])]);
+    const inMapPoints = validPoints.filter(point => isMapPoint(point[0], point[1]));
+    const riverPoints = inMapPoints.filter(point => isRiverCorridorPoint(point[0], point[1]));
 
-    if (validPoints.length === 0) return null;
+    if (riverPoints.length >= 2) {
+        return {
+            points: riverPoints,
+            corrected: riverPoints.length !== validPoints.length
+        };
+    }
 
-    const point = validPoints[Math.floor(validPoints.length / 2)];
+    return {
+        points: getFallbackTrack(groupName),
+        corrected: true
+    };
+}
+
+function getTrackPointByRatio(track, ratio) {
+    if (!Array.isArray(track) || track.length === 0) return null;
+    const safeRatio = Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0.5));
+    const index = Math.round(safeRatio * (track.length - 1));
+    const point = track[index];
+    if (!Array.isArray(point) || point.length < 2) return null;
     return {
         lat: Number(point[0]),
         lng: Number(point[1])
     };
+}
+
+function getDefaultGroupPoint(gpsTrack, groupName = '') {
+    const { points } = getUsableTrack(gpsTrack, groupName);
+    return getTrackPointByRatio(points, 0.5);
 }
 
 app.use('/media', (req, res, next) => {
@@ -161,9 +321,11 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
     try {
         const groups = await db.all("SELECT * FROM groups");
         for (const group of groups) {
+            const usableTrack = getUsableTrack(group.gps_track, group.name);
             groupsData[group.id] = {
                 name: group.name,
-                gps_track: JSON.parse(group.gps_track),
+                gps_track: usableTrack.points,
+                gps_track_corrected: usableTrack.corrected,
                 selected_images: {
                     ground: getSelectedImagePath(group.id, 'ground'),
                     underwater: getSelectedImagePath(group.id, 'underwater')
@@ -171,16 +333,34 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
                 detections: []
             };
             const detections = await db.all("SELECT * FROM detections WHERE group_id = ? AND COALESCE(hidden, 0) = 0", group.id);
+            const finiteTimestamps = detections
+                .map(det => Number(det.timestamp_sec))
+                .filter(Number.isFinite);
+            const minTimestamp = finiteTimestamps.length > 0 ? Math.min(...finiteTimestamps) : 0;
+            const maxTimestamp = finiteTimestamps.length > 0 ? Math.max(...finiteTimestamps) : 0;
             for (const det of detections) {
                 // image_url も一緒に取得するように追加
                 const posts = await db.all(
                     "SELECT nickname, creature, comment, image_url, concept_image_url FROM user_posts WHERE detection_id = ? AND COALESCE(hidden, 0) = 0",
                     det.id
                 );
+                let lat = Number(det.lat);
+                let lng = Number(det.lng);
+                if (!isRiverCorridorPoint(lat, lng)) {
+                    const timestamp = Number(det.timestamp_sec);
+                    const ratio = Number.isFinite(timestamp) && maxTimestamp > minTimestamp
+                        ? (timestamp - minTimestamp) / (maxTimestamp - minTimestamp)
+                        : 0.5;
+                    const fallbackPoint = getTrackPointByRatio(usableTrack.points, ratio);
+                    if (fallbackPoint) {
+                        lat = fallbackPoint.lat;
+                        lng = fallbackPoint.lng;
+                    }
+                }
                 groupsData[group.id].detections.push({
                     id: det.id,
-                    lat: det.lat,
-                    lng: det.lng,
+                    lat,
+                    lng,
                     class_name: det.class_name,
                     verified_class_name: det.verified_class_name,
                     timestamp: det.timestamp_sec,
@@ -420,13 +600,13 @@ app.post('/api/admin/detections', requireAdmin, manualDetectionUpload, async (re
     }
 
     try {
-        const group = await db.get("SELECT id, gps_track FROM groups WHERE id = ?", groupId);
+        const group = await db.get("SELECT id, name, gps_track FROM groups WHERE id = ?", groupId);
         if (!group) {
             return res.status(404).json({ error: "班が見つかりません" });
         }
 
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-            const defaultPoint = getDefaultGroupPoint(group.gps_track);
+            const defaultPoint = getDefaultGroupPoint(group.gps_track, group.name);
             if (!defaultPoint) {
                 return res.status(400).json({ error: "追加する場所を決められませんでした" });
             }
