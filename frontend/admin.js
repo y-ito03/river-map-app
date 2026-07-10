@@ -27,6 +27,8 @@ const addDetectionMessage = document.getElementById('add-detection-message');
 const selectedImageForm = document.getElementById('selected-image-form');
 const selectedImageGroup = document.getElementById('selected-image-group');
 const selectedImageMessage = document.getElementById('selected-image-message');
+const deleteSelectedImageBtn = document.getElementById('delete-selected-image-btn');
+const selectedImageType = document.getElementById('selected-image-type');
 
 let posts = [];
 let detections = [];
@@ -165,6 +167,9 @@ function normalizeDetectionLabel(value) {
 
 function getLocationLabel(post) {
   if (post.type === 'free') {
+    if (post.event_date === '2026-07-11') {
+      return `2026年7月11日 / 緯度 ${Number(post.lat).toFixed(6)}, 経度 ${Number(post.lng).toFixed(6)}`;
+    }
     const classLabel = post.class_number ? `クラス ${post.class_number}` : '全体';
     return `${classLabel} / 緯度 ${Number(post.lat).toFixed(6)}, 経度 ${Number(post.lng).toFixed(6)}`;
   }
@@ -252,7 +257,7 @@ function updateDetectionGroupFilter() {
     .sort((a, b) => a.localeCompare(b, 'ja'));
 
   detectionGroupFilter.innerHTML = `
-    <option value="all">すべての班</option>
+    <option value="all">すべての記録</option>
     ${groupNames.map((groupName) => `<option value="${escapeHtml(groupName)}">${escapeHtml(groupName)}</option>`).join('')}
   `;
 
@@ -271,12 +276,12 @@ function updateAddDetectionFormOptions() {
     `).join('');
 
   addDetectionGroup.innerHTML = `
-    <option value="">班を選ぶ</option>
+    <option value="">記録を選ぶ</option>
     ${groupOptions}
   `;
 
   selectedImageGroup.innerHTML = `
-    <option value="">班を選ぶ</option>
+    <option value="">記録を選ぶ</option>
     ${groupOptions}
   `;
 
@@ -338,7 +343,7 @@ function renderDetections() {
   const statusSuffix = detectionStatusFilter.value === 'all'
     ? ''
     : ` / 現在表示 ${filteredDetections.length}件`;
-  detectionSummaryText.textContent = `${selectedGroup === 'all' ? '全班' : selectedGroup}：全 ${summaryTargetDetections.length}件 / 表示中 ${visibleCount}件 / 非表示 ${hiddenCount}件${statusSuffix}`;
+  detectionSummaryText.textContent = `${selectedGroup === 'all' ? 'すべての記録' : selectedGroup}：全 ${summaryTargetDetections.length}件 / 表示中 ${visibleCount}件 / 非表示 ${hiddenCount}件${statusSuffix}`;
 
   if (filteredDetections.length === 0) {
     detectionsList.innerHTML = '<p class="empty-text">表示する検出候補はありません。</p>';
@@ -445,7 +450,7 @@ async function addDetection(event) {
 
   const formData = new FormData(addDetectionForm);
   if (!formData.get('group_id') || !formData.get('class_name')) {
-    addDetectionMessage.textContent = '班と候補名を選んでください。';
+    addDetectionMessage.textContent = '記録と候補名を選んでください。';
     return;
   }
 
@@ -469,7 +474,7 @@ async function saveSelectedImage(event) {
   const formData = new FormData(selectedImageForm);
   const groupId = formData.get('group_id');
   if (!groupId || !formData.get('image')) {
-    selectedImageMessage.textContent = '班と画像を選んでください。';
+    selectedImageMessage.textContent = '記録と画像を選んでください。';
     return;
   }
 
@@ -480,6 +485,29 @@ async function saveSelectedImage(event) {
     selectedImageForm.reset();
     selectedImageGroup.value = groupId;
     selectedImageMessage.textContent = '画像を保存しました。';
+    await loadDetections();
+  } catch (error) {
+    selectedImageMessage.textContent = error.message;
+  }
+}
+
+async function deleteSelectedImage() {
+  const groupId = selectedImageGroup.value;
+  const type = selectedImageType.value;
+
+  if (!groupId || !type) {
+    selectedImageMessage.textContent = '記録と画像の種類を選んでください。';
+    return;
+  }
+
+  if (!window.confirm('選択した画像を削除します。よろしいですか？')) return;
+
+  selectedImageMessage.textContent = '削除中...';
+  try {
+    await fetchJson(`/api/admin/groups/${encodeURIComponent(groupId)}/selected-image/${encodeURIComponent(type)}`, {
+      method: 'DELETE',
+    });
+    selectedImageMessage.textContent = '画像を削除しました。';
     await loadDetections();
   } catch (error) {
     selectedImageMessage.textContent = error.message;
@@ -524,6 +552,7 @@ detectionStatusFilter.addEventListener('change', renderDetections);
 detectionGroupFilter.addEventListener('change', renderDetections);
 addDetectionForm.addEventListener('submit', addDetection);
 selectedImageForm.addEventListener('submit', saveSelectedImage);
+deleteSelectedImageBtn.addEventListener('click', deleteSelectedImage);
 adminTabs.addEventListener('click', (event) => {
   const button = event.target.closest('.tab-btn');
   if (!button) return;

@@ -44,6 +44,7 @@ async function setupDatabase() {
             comment TEXT,
             image_url TEXT,
             concept_image_url TEXT,
+            event_date TEXT DEFAULT '2026-06-19',
             hidden INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS free_posts (

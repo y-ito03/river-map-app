@@ -7,6 +7,7 @@ window.wizardData = {
     lat: null,
     lng: null,
     classNumber: null,
+    eventDate: "2026-06-19",
     creature: ""
 };
 
@@ -18,7 +19,10 @@ window.openWizard = function(target) {
         window.wizardData.lat = target.lat;
         window.wizardData.lng = target.lng;
         window.wizardData.classNumber = target.classNumber || null;
-        document.getElementById('wizard-target-label').innerText = "えらんだ場所に とうこう";
+        window.wizardData.eventDate = target.eventDate || "2026-06-19";
+        document.getElementById('wizard-target-label').innerText = window.wizardData.eventDate === "2026-07-11"
+            ? "2026年7月11日に とうこう"
+            : "えらんだ場所に とうこう";
     } else {
         return;
     }
@@ -192,6 +196,7 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
         if (window.wizardData.classNumber) {
             formData.append('classNumber', window.wizardData.classNumber);
         }
+        formData.append('eventDate', window.wizardData.eventDate || "2026-06-19");
         const endpoint = '/api/free-posts';
 
         const fetcher = window.fetchWithAccess || fetch;

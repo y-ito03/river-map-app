@@ -55,12 +55,12 @@
       <section id="detections-panel" class="hidden">
         <section class="admin-panel selected-image-panel">
           <h2>地上画像・水中画像を追加</h2>
-          <p>班ごとに表示する「地上の様子」「水中の様子」を追加・差し替えできます。</p>
+          <p>班または日付ごとに表示する「地上の様子」「水中の様子」を追加・差し替えできます。</p>
           <form id="selected-image-form" class="selected-image-form">
             <label>
-              班
+              記録
               <select id="selected-image-group" name="group_id" required>
-                <option value="">班を選ぶ</option>
+                <option value="">記録を選ぶ</option>
               </select>
             </label>
             <label>
@@ -76,6 +76,7 @@
             </label>
             <div class="form-actions">
               <button type="submit">画像を保存</button>
+              <button id="delete-selected-image-btn" type="button" class="secondary-btn">画像を削除</button>
               <span id="selected-image-message" class="form-message"></span>
             </div>
           </form>
@@ -83,12 +84,12 @@
 
         <section class="admin-panel add-detection-panel">
           <h2>検出候補を追加</h2>
-          <p>AIがうまく見つけられなかった候補を、班の記録に手動で追加できます。場所を指定しない場合は、その班の道の中央あたりに追加されます。</p>
+          <p>AIがうまく見つけられなかった候補を、班または日付の記録に手動で追加できます。場所を指定しない場合は、記録の中央あたりに追加されます。</p>
           <form id="add-detection-form" class="add-detection-form">
             <label>
-              班
+              記録
               <select id="add-detection-group" name="group_id" required>
-                <option value="">班を選ぶ</option>
+                <option value="">記録を選ぶ</option>
               </select>
             </label>
             <label>

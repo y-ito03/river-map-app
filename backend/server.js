@@ -31,6 +31,15 @@ const mediaDir = path.join(__dirname, 'media');
 const uploadDir = path.join(mediaDir, 'uploads');
 const databaseFile = path.join(__dirname, 'database.sqlite');
 const SELECTED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
+const EVENT_DATE_JUNE19 = '2026-06-19';
+const EVENT_DATE_JULY11 = '2026-07-11';
+const JULY11_GROUP = {
+    id: EVENT_DATE_JULY11,
+    name: '2026年7月11日',
+    gps_track: '[]',
+    event_date: EVENT_DATE_JULY11,
+    is_event: 1
+};
 const MAP_SOURCE_BOUNDS = {
     north: 35.0668688174732,
     south: 35.06464445892178,
@@ -54,6 +63,40 @@ const CLASS_NAME_TO_NUMBER = { davis: 1, hardy: 2, learned: 3 };
 const TEAM_LETTER_TO_NUMBER = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7 };
 
 app.use(express.json());
+
+function getEventDate(value) {
+    const text = String(value || '').trim();
+    return text === EVENT_DATE_JULY11 ? EVENT_DATE_JULY11 : EVENT_DATE_JUNE19;
+}
+
+function isVirtualGroupId(groupId) {
+    return String(groupId) === JULY11_GROUP.id;
+}
+
+function getVirtualGroups() {
+    return [{ ...JULY11_GROUP }];
+}
+
+async function getGroupsWithVirtualEvents() {
+    const groups = await db.all("SELECT id, name, gps_track, ? AS event_date, 0 AS is_event FROM groups ORDER BY name ASC", EVENT_DATE_JUNE19);
+    return [...groups, ...getVirtualGroups()];
+}
+
+async function getGroupWithVirtualEvent(groupId) {
+    if (isVirtualGroupId(groupId)) return { ...JULY11_GROUP };
+    return db.get("SELECT id, name, gps_track, ? AS event_date, 0 AS is_event FROM groups WHERE id = ?", EVENT_DATE_JUNE19, groupId);
+}
+
+function getDefaultPointForGroup(group) {
+    if (group?.is_event) {
+        return {
+            lat: (MAP_SOURCE_BOUNDS.north + MAP_SOURCE_BOUNDS.south) / 2,
+            lng: (MAP_SOURCE_BOUNDS.west + MAP_SOURCE_BOUNDS.east) / 2
+        };
+    }
+
+    return getDefaultGroupPoint(group?.gps_track, group?.name);
+}
 
 function getAccessCode(req) {
     return req.get('X-Access-Code') || req.query.access || '';
@@ -319,11 +362,15 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
     console.log("【受信】フロントエンドからデータ取得リクエストが来ました");
     const groupsData = {};
     try {
-        const groups = await db.all("SELECT * FROM groups");
+        const groups = await getGroupsWithVirtualEvents();
         for (const group of groups) {
-            const usableTrack = getUsableTrack(group.gps_track, group.name);
+            const usableTrack = group.is_event
+                ? { points: [], corrected: false }
+                : getUsableTrack(group.gps_track, group.name);
             groupsData[group.id] = {
                 name: group.name,
+                event_date: group.event_date || EVENT_DATE_JUNE19,
+                is_event: Boolean(group.is_event),
                 gps_track: usableTrack.points,
                 gps_track_corrected: usableTrack.corrected,
                 selected_images: {
@@ -346,7 +393,15 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
                 );
                 let lat = Number(det.lat);
                 let lng = Number(det.lng);
-                if (!isRiverCorridorPoint(lat, lng)) {
+                if (group.is_event) {
+                    const fallbackPoint = Number.isFinite(lat) && Number.isFinite(lng)
+                        ? null
+                        : getDefaultPointForGroup(group);
+                    if (fallbackPoint) {
+                        lat = fallbackPoint.lat;
+                        lng = fallbackPoint.lng;
+                    }
+                } else if (!isRiverCorridorPoint(lat, lng)) {
                     const timestamp = Number(det.timestamp_sec);
                     const ratio = Number.isFinite(timestamp) && maxTimestamp > minTimestamp
                         ? (timestamp - minTimestamp) / (maxTimestamp - minTimestamp)
@@ -369,7 +424,22 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
                 });
             }
         }
-        const freePosts = await db.all("SELECT id, lat, lng, class_number, nickname, creature, comment, image_url, concept_image_url FROM free_posts WHERE COALESCE(hidden, 0) = 0 ORDER BY id ASC");
+        const freePosts = await db.all(`
+            SELECT
+                id,
+                lat,
+                lng,
+                class_number,
+                COALESCE(event_date, ?) AS event_date,
+                nickname,
+                creature,
+                comment,
+                image_url,
+                concept_image_url
+            FROM free_posts
+            WHERE COALESCE(hidden, 0) = 0
+            ORDER BY id ASC
+        `, EVENT_DATE_JUNE19);
         res.json({ groups: groupsData, free_posts: freePosts });
     } catch (err) {
         console.error("データベースエラー:", err);
@@ -411,6 +481,7 @@ app.post('/api/free-posts', requireAccess, postUpload, async (req, res) => {
     const lat = parseFloat(postData.lat);
     const lng = parseFloat(postData.lng);
     const classNumber = postData.classNumber ? parseInt(postData.classNumber, 10) : null;
+    const eventDate = getEventDate(postData.eventDate || postData.event_date);
     const imageFile = req.files?.image?.[0];
     const conceptFile = req.files?.conceptImage?.[0];
 
@@ -423,9 +494,9 @@ app.post('/api/free-posts', requireAccess, postUpload, async (req, res) => {
 
     try {
         await db.run(
-            `INSERT INTO free_posts (lat, lng, class_number, nickname, creature, comment, image_url, concept_image_url)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [lat, lng, Number.isNaN(classNumber) ? null : classNumber, postData.nickname, postData.creature, postData.comment, imageUrl, conceptImageUrl]
+            `INSERT INTO free_posts (lat, lng, class_number, event_date, nickname, creature, comment, image_url, concept_image_url)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [lat, lng, Number.isNaN(classNumber) ? null : classNumber, eventDate, postData.nickname, postData.creature, postData.comment, imageUrl, conceptImageUrl]
         );
         res.json({ status: "success", message: "自由投稿を保存しました！" });
     } catch (err) {
@@ -488,12 +559,15 @@ async function getAdminPosts() {
             d.lat,
             d.lng,
             d.thumbnail_path,
-            g.name AS group_name
+            CASE
+                WHEN d.group_id = ? THEN ?
+                ELSE g.name
+            END AS group_name
         FROM user_posts p
         LEFT JOIN detections d ON d.id = p.detection_id
         LEFT JOIN groups g ON g.id = d.group_id
         ORDER BY p.id DESC
-    `);
+    `, JULY11_GROUP.id, JULY11_GROUP.name);
 
     const freePosts = await db.all(`
         SELECT
@@ -511,10 +585,11 @@ async function getAdminPosts() {
             lng,
             NULL AS thumbnail_path,
             class_number,
+            COALESCE(event_date, ?) AS event_date,
             NULL AS group_name
         FROM free_posts
         ORDER BY id DESC
-    `);
+    `, EVENT_DATE_JUNE19);
 
     return [...detectionPosts, ...freePosts].sort((a, b) => b.id - a.id);
 }
@@ -552,7 +627,7 @@ app.patch('/api/admin/posts/:type/:id', requireAdmin, async (req, res) => {
 
 app.get('/api/admin/detections', requireAdmin, async (req, res) => {
     try {
-        const groups = await db.all("SELECT id, name FROM groups ORDER BY name ASC");
+        const groups = await getGroupsWithVirtualEvents();
         const detections = await db.all(`
             SELECT
                 d.id,
@@ -565,11 +640,14 @@ app.get('/api/admin/detections', requireAdmin, async (req, res) => {
                 d.timestamp_sec,
                 d.thumbnail_path,
                 COALESCE(d.hidden, 0) AS hidden,
-                g.name AS group_name
+                CASE
+                    WHEN d.group_id = ? THEN ?
+                    ELSE g.name
+                END AS group_name
             FROM detections d
             LEFT JOIN groups g ON g.id = d.group_id
-            ORDER BY g.name ASC, d.timestamp_sec ASC, d.id ASC
-        `);
+            ORDER BY group_name ASC, d.timestamp_sec ASC, d.id ASC
+        `, JULY11_GROUP.id, JULY11_GROUP.name);
 
         res.json({ groups, detections, label_options: DETECTION_LABEL_OPTIONS });
     } catch (err) {
@@ -600,13 +678,13 @@ app.post('/api/admin/detections', requireAdmin, manualDetectionUpload, async (re
     }
 
     try {
-        const group = await db.get("SELECT id, name, gps_track FROM groups WHERE id = ?", groupId);
+        const group = await getGroupWithVirtualEvent(groupId);
         if (!group) {
             return res.status(404).json({ error: "班が見つかりません" });
         }
 
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-            const defaultPoint = getDefaultGroupPoint(group.gps_track, group.name);
+            const defaultPoint = getDefaultPointForGroup(group);
             if (!defaultPoint) {
                 return res.status(400).json({ error: "追加する場所を決められませんでした" });
             }
@@ -655,7 +733,7 @@ app.post('/api/admin/groups/:id/selected-image', requireAdmin, selectedImageUplo
     }
 
     try {
-        const group = await db.get("SELECT id FROM groups WHERE id = ?", groupId);
+        const group = await getGroupWithVirtualEvent(groupId);
         if (!group) {
             return res.status(404).json({ error: "班が見つかりません" });
         }
@@ -691,6 +769,43 @@ app.post('/api/admin/groups/:id/selected-image', requireAdmin, selectedImageUplo
             await fs.promises.unlink(req.file.path).catch(() => {});
         }
         res.status(500).json({ error: "画像の保存に失敗しました" });
+    }
+});
+
+app.delete('/api/admin/groups/:id/selected-image/:type', requireAdmin, async (req, res) => {
+    const groupId = req.params.id;
+    const imageType = String(req.params.type || '').trim();
+
+    if (!['ground', 'underwater'].includes(imageType)) {
+        return res.status(400).json({ error: "画像の種類が正しくありません" });
+    }
+
+    try {
+        const group = await getGroupWithVirtualEvent(groupId);
+        if (!group) {
+            return res.status(404).json({ error: "班が見つかりません" });
+        }
+
+        const selectedDir = path.resolve(mediaDir, groupId, 'selected');
+        if (!selectedDir.startsWith(mediaDir + path.sep)) {
+            return res.status(403).json({ error: "削除できないパスです" });
+        }
+
+        let deleted = 0;
+        for (const extension of SELECTED_IMAGE_EXTENSIONS) {
+            const existingPath = path.join(selectedDir, `${imageType}${extension}`);
+            try {
+                await fs.promises.unlink(existingPath);
+                deleted += 1;
+            } catch (err) {
+                if (err.code !== 'ENOENT') throw err;
+            }
+        }
+
+        res.json({ status: "success", deleted });
+    } catch (err) {
+        console.error("班代表画像の削除エラー:", err);
+        res.status(500).json({ error: "画像の削除に失敗しました" });
     }
 });
 
@@ -797,6 +912,7 @@ async function ensureSchema() {
             comment TEXT,
             image_url TEXT,
             concept_image_url TEXT,
+            event_date TEXT DEFAULT '2026-06-19',
             hidden INTEGER DEFAULT 0
         );
 
@@ -819,6 +935,7 @@ async function ensureSchema() {
     await addColumnIfMissing('user_posts', 'hidden', 'INTEGER DEFAULT 0');
     await addColumnIfMissing('free_posts', 'class_number', 'INTEGER');
     await addColumnIfMissing('free_posts', 'concept_image_url', 'TEXT');
+    await addColumnIfMissing('free_posts', 'event_date', `TEXT DEFAULT '${EVENT_DATE_JUNE19}'`);
     await addColumnIfMissing('free_posts', 'hidden', 'INTEGER DEFAULT 0');
 }
 
