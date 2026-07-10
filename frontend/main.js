@@ -129,15 +129,35 @@ const map = L.map('map', {
     maxBoundsViscosity: 1.0
 });
 
+const mapIllustrations = {
+    '2026-06-19': '/river_map6_landscape.jpg',
+    '2026-07-11': '/20260711_map.png'
+};
+let currentMapIllustration = '2026-06-19';
+let mapImageOverlay = null;
+
 function fitMapToIllustration() {
     const coverZoom = map.getBoundsZoom(imageBounds, true);
     map.setView(allowedBounds.getCenter(), Math.max(coverZoom, map.getMinZoom()), { animate: false });
 }
 
-L.imageOverlay('/river_map6_landscape.jpg', imageBounds, {
-    interactive: true,
-    opacity: 1.0
-}).addTo(map);
+function setMapIllustration(dateKey) {
+    const nextDateKey = mapIllustrations[dateKey] ? dateKey : '2026-06-19';
+    if (mapImageOverlay && currentMapIllustration === nextDateKey) return;
+
+    if (mapImageOverlay) {
+        map.removeLayer(mapImageOverlay);
+    }
+
+    currentMapIllustration = nextDateKey;
+    mapImageOverlay = L.imageOverlay(mapIllustrations[nextDateKey], imageBounds, {
+        interactive: true,
+        opacity: 1.0
+    }).addTo(map);
+    mapImageOverlay.bringToBack();
+}
+
+setMapIllustration('2026-06-19');
 
 fitMapToIllustration();
 
@@ -785,11 +805,13 @@ function renderPostedDetectionMarkers(classFilter = 'all', targetGroupId = null)
 
 function renderGroupData(groupId) {
     setFreePostMode(false);
+    setMapIllustration('2026-06-19');
     currentGroupId = groupId;
     const data = surveyData[groupId];
     if (!data) return;
 
     clearMap();
+    document.querySelector('.title').innerText = `${APP_TITLE} - ${getDisplayGroupName(data.name)}`;
 
     if (data.gps_track && data.gps_track.length > 0) {
         const line = L.polyline(toDisplayTrack(data.gps_track), getGroupStyle(data.name)).addTo(map);
@@ -804,10 +826,12 @@ function renderGroupData(groupId) {
     renderPostedDetectionMarkers(String(classNumber), groupId);
     openGroupReviewPanel(groupId);
     fitMapToIllustration();
+    updateSidebarMenu();
 }
 
 function renderAllTracks(classFilter = allTracksClassFilter) {
     setFreePostMode(false);
+    setMapIllustration('2026-06-19');
     currentGroupId = "all-tracks";
     allTracksClassFilter = classFilter;
     clearMap();
@@ -860,6 +884,7 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
         : getDefaultReviewGroupId(classFilter);
     openGroupReviewPanel(reviewGroupId, { showSelector: true, classFilter, viewMode: 'all-records' });
     fitMapToIllustration();
+    updateSidebarMenu();
 }
 
 function drawHeatLayer(targetCreature) {
@@ -885,6 +910,7 @@ function drawHeatLayer(targetCreature) {
 
 function renderHeatmap() {
     setFreePostMode(false);
+    setMapIllustration('2026-06-19');
     clearMap();
     currentGroupId = "heatmap";
     document.querySelector('.title').innerText = `${APP_TITLE} - 多く見つかった場所`;
@@ -922,6 +948,19 @@ function renderHeatmap() {
 
     document.getElementById('summary-panel').classList.remove('hidden');
     drawHeatLayer('all');
+    updateSidebarMenu();
+}
+
+function renderJuly11Layer() {
+    setFreePostMode(false);
+    clearMap();
+    setMapIllustration('2026-07-11');
+    currentGroupId = '2026-07-11';
+    selectedReviewGroupId = null;
+    lastPanelGroupId = null;
+    document.querySelector('.title').innerText = `${APP_TITLE} - 2026年7月11日`;
+    fitMapToIllustration();
+    updateSidebarMenu();
 }
 
 document.getElementById('heatmap-filter').addEventListener('change', (event) => {
@@ -939,13 +978,19 @@ const coachmarkSteps = [
         selector: '#btn-all-tracks',
         title: 'すべての班の記録',
         body: 'すべての班が歩いた道や投稿を、まとめて見ることができます。Davis、Hardy、Learnedだけをえらぶこともできます。',
-        before: () => document.getElementById('sidebar').classList.remove('hidden')
+        before: () => {
+            document.getElementById('sidebar').classList.remove('hidden');
+            document.getElementById('menu-date-2026-06-19')?.setAttribute('open', '');
+        }
     },
     {
         selector: '#btn-free-post',
         title: '場所をえらんで投稿',
         body: 'このボタンを押してから地図をタップすると、スケッチをとうこうする場所をえらべます。',
-        before: () => document.getElementById('sidebar').classList.remove('hidden')
+        before: () => {
+            document.getElementById('sidebar').classList.remove('hidden');
+            document.getElementById('menu-date-2026-06-19')?.setAttribute('open', '');
+        }
     },
     {
         selector: '#map',
@@ -957,7 +1002,10 @@ const coachmarkSteps = [
         selector: '#btn-heatmap',
         title: '多く見つかった場所',
         body: 'いきものが多く見つかった場所を、色で見ることができます。',
-        before: () => document.getElementById('sidebar').classList.remove('hidden')
+        before: () => {
+            document.getElementById('sidebar').classList.remove('hidden');
+            document.getElementById('menu-date-2026-06-19')?.setAttribute('open', '');
+        }
     }
 ];
 
@@ -1044,20 +1092,29 @@ function updateSidebarMenu() {
     const sidebarList = document.querySelector('#sidebar ul');
     sidebarList.innerHTML = '';
 
-    const liGroups = document.createElement('li');
-    liGroups.className = 'menu-groups';
+    const liJune19 = document.createElement('li');
+    const june19Details = document.createElement('details');
+    june19Details.id = 'menu-date-2026-06-19';
+    june19Details.className = 'menu-details date-menu-details';
+    june19Details.open = currentGroupId !== '2026-07-11';
+
+    const june19Summary = document.createElement('summary');
+    june19Summary.innerText = '2026年6月19日';
+    june19Details.appendChild(june19Summary);
 
     const groupsDetails = document.createElement('details');
     groupsDetails.className = 'menu-details group-menu-details';
-    groupsDetails.open = currentGroupId && currentGroupId !== 'all-tracks' && currentGroupId !== 'heatmap';
+    groupsDetails.open = Boolean(currentGroupId && surveyData[currentGroupId]);
 
     const groupsSummary = document.createElement('summary');
     groupsSummary.innerText = '班の記録を選ぶ';
     groupsDetails.appendChild(groupsSummary);
 
+    let hasGroupMenu = false;
     Object.entries(classNames).forEach(([classNumber, className]) => {
         const classGroups = getSortedGroupEntries(String(classNumber));
         if (classGroups.length === 0) return;
+        hasGroupMenu = true;
 
         const classDetails = document.createElement('details');
         classDetails.className = 'menu-details class-menu-details';
@@ -1091,55 +1148,69 @@ function updateSidebarMenu() {
         groupsDetails.appendChild(classDetails);
     });
 
-    liGroups.appendChild(groupsDetails);
-    sidebarList.appendChild(liGroups);
-
-    if (sidebarList.children.length === 0) {
-        const li = document.createElement('li');
+    if (!hasGroupMenu) {
         const btn = document.createElement('button');
-        btn.className = 'nav-btn';
+        btn.className = 'nav-btn date-nav-btn';
         btn.disabled = true;
         btn.innerText = '表示できる班がありません';
-        li.appendChild(btn);
-        sidebarList.appendChild(li);
+        groupsDetails.appendChild(btn);
     }
 
-    const liAllTracks = document.createElement('li');
+    june19Details.appendChild(groupsDetails);
+
     const btnAllTracks = document.createElement('button');
     btnAllTracks.id = 'btn-all-tracks';
-    btnAllTracks.className = 'nav-btn';
+    btnAllTracks.className = 'nav-btn date-nav-btn';
     btnAllTracks.innerText = 'すべての班の記録を見る';
     btnAllTracks.addEventListener('click', () => {
         selectedReviewGroupId = null;
         renderAllTracks();
         document.getElementById('sidebar').classList.add('hidden');
     });
-    liAllTracks.appendChild(btnAllTracks);
-    sidebarList.appendChild(liAllTracks);
+    june19Details.appendChild(btnAllTracks);
 
-    const liFreePost = document.createElement('li');
     const btnFreePost = document.createElement('button');
     btnFreePost.id = 'btn-free-post';
-    btnFreePost.className = 'nav-btn';
+    btnFreePost.className = 'nav-btn date-nav-btn';
     btnFreePost.innerText = '投稿する場所をえらぶ';
     btnFreePost.addEventListener('click', () => {
+        setMapIllustration('2026-06-19');
+        if (currentGroupId === '2026-07-11') {
+            currentGroupId = null;
+            clearMap();
+            fitMapToIllustration();
+        }
+        document.querySelector('.title').innerText = `${APP_TITLE} - 投稿する場所をえらぶ`;
         setFreePostMode(true);
         document.getElementById('sidebar').classList.add('hidden');
     });
-    liFreePost.appendChild(btnFreePost);
-    sidebarList.appendChild(liFreePost);
+    june19Details.appendChild(btnFreePost);
 
-    const liHeat = document.createElement('li');
     const btnHeat = document.createElement('button');
     btnHeat.id = 'btn-heatmap';
-    btnHeat.className = 'nav-btn';
+    btnHeat.className = 'nav-btn date-nav-btn';
     btnHeat.innerText = '多く見つかった場所を見る';
     btnHeat.addEventListener('click', () => {
         renderHeatmap();
         document.getElementById('sidebar').classList.add('hidden');
     });
-    liHeat.appendChild(btnHeat);
-    sidebarList.appendChild(liHeat);
+    june19Details.appendChild(btnHeat);
+
+    liJune19.appendChild(june19Details);
+    sidebarList.appendChild(liJune19);
+
+    const liJuly11 = document.createElement('li');
+    const btnJuly11 = document.createElement('button');
+    btnJuly11.id = 'btn-july-2026';
+    btnJuly11.className = 'nav-btn';
+    btnJuly11.innerText = '2026年7月11日';
+    btnJuly11.classList.toggle('active', currentGroupId === '2026-07-11');
+    btnJuly11.addEventListener('click', () => {
+        renderJuly11Layer();
+        document.getElementById('sidebar').classList.add('hidden');
+    });
+    liJuly11.appendChild(btnJuly11);
+    sidebarList.appendChild(liJuly11);
 
     const liTutorial = document.createElement('li');
     const btnTutorial = document.createElement('button');
@@ -1168,7 +1239,9 @@ function updateSidebarMenu() {
 }
 
 function rerenderCurrentView() {
-    if (currentGroupId === "heatmap") {
+    if (currentGroupId === '2026-07-11') {
+        renderJuly11Layer();
+    } else if (currentGroupId === "heatmap") {
         renderHeatmap();
     } else if (currentGroupId === "all-tracks") {
         renderAllTracks();

@@ -47,14 +47,27 @@ body, html {
   content: "▼"; font-size: 0.8em; color: #666; margin-left: 10px;
 }
 .menu-details[open] > summary::after { content: "▲"; }
+.date-menu-details > .menu-details {
+  border-bottom: none;
+  background: rgba(76, 175, 80, 0.04);
+}
+.date-menu-details > .date-nav-btn {
+  padding-left: 28px;
+  background: rgba(255,255,255,0.72);
+}
+.date-menu-details > .date-nav-btn:hover { background: #f0f0f0; }
+.date-menu-details > .group-menu-details > summary {
+  padding-left: 28px;
+  font-weight: 600;
+}
 .class-menu-details {
   border-bottom: none; background: rgba(76, 175, 80, 0.04);
 }
 .class-menu-details summary {
-  padding: 12px 20px 12px 28px; color: #2e7d32;
+  padding: 12px 20px 12px 36px; color: #2e7d32;
 }
 .group-menu-list .nav-btn {
-  padding-left: 38px; font-size: 0.95em; background: rgba(255,255,255,0.72);
+  padding-left: 48px; font-size: 0.95em; background: rgba(255,255,255,0.72);
 }
 .group-menu-list .nav-btn:hover { background: #f0f0f0; }
 
