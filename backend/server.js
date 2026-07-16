@@ -42,7 +42,10 @@ const JULY11_GROUP = {
 };
 const METERS_PER_DEGREE_LAT = 111320;
 const RIVER_CORRIDOR_RADIUS_M = Number(process.env.RIVER_CORRIDOR_RADIUS_M || 25);
-const JULY11_RIVER_CORRIDOR_RADIUS_M = Number(process.env.JULY11_RIVER_CORRIDOR_RADIUS_M || 5);
+const JULY11_RIVER_CORRIDOR_RADIUS_M = Number(process.env.JULY11_RIVER_CORRIDOR_RADIUS_M || 8);
+const JULY11_ROUTE_BIN_LAT_DEGREES = 0.00005;
+const JULY11_ROUTE_MIN_BIN_POINTS = 20;
+const TRACK_SEGMENT_MAX_JUMP_M = 20;
 const MAP_CONFIGS = {
     [EVENT_DATE_JUNE19]: {
         bounds: {
@@ -63,21 +66,14 @@ const MAP_CONFIGS = {
     },
     [EVENT_DATE_JULY11]: {
         bounds: {
-            north: 35.06805,
-            south: 35.06580,
-            west: 135.78410,
-            east: 135.78565
+            north: 35.07020,
+            south: 35.06440,
+            west: 135.78380,
+            east: 135.78720
         },
         corridorRadiusM: JULY11_RIVER_CORRIDOR_RADIUS_M,
-        riverCenterline: [
-            [35.06590, 135.78455],
-            [35.06625, 135.78472],
-            [35.06660, 135.78490],
-            [35.06695, 135.78508],
-            [35.06730, 135.78525],
-            [35.06760, 135.78538],
-            [35.06795, 135.78552]
-        ]
+        riverCenterline: [],
+        useConsensusCenterline: true
     }
 };
 const CLASS_LETTER_TO_NUMBER = { d: 1, h: 2, l: 3 };
@@ -253,8 +249,19 @@ function distancePointToSegmentMeters(point, segmentStart, segmentEnd, eventDate
     return Math.hypot(p.x - closestX, p.y - closestY);
 }
 
-function distanceToRiverMeters(lat, lng, eventDate = EVENT_DATE_JUNE19) {
-    const { riverCenterline } = getMapConfig(eventDate);
+function distanceBetweenPointsMeters(pointA, pointB, eventDate = EVENT_DATE_JUNE19) {
+    const a = toLocalMeters(pointA, eventDate);
+    const b = toLocalMeters(pointB, eventDate);
+    return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function distanceToRiverMeters(lat, lng, eventDate = EVENT_DATE_JUNE19, centerlineOverride = null) {
+    const config = getMapConfig(eventDate);
+    const riverCenterline = Array.isArray(centerlineOverride) && centerlineOverride.length >= 2
+        ? centerlineOverride
+        : config.riverCenterline;
+    if (!Array.isArray(riverCenterline) || riverCenterline.length < 2) return Infinity;
+
     let minDistance = Infinity;
     const point = [lat, lng];
     for (let index = 0; index < riverCenterline.length - 1; index += 1) {
@@ -266,10 +273,10 @@ function distanceToRiverMeters(lat, lng, eventDate = EVENT_DATE_JUNE19) {
     return minDistance;
 }
 
-function isRiverCorridorPoint(lat, lng, eventDate = EVENT_DATE_JUNE19) {
+function isRiverCorridorPoint(lat, lng, eventDate = EVENT_DATE_JUNE19, centerlineOverride = null) {
     const { corridorRadiusM } = getMapConfig(eventDate);
     return isMapPoint(lat, lng, eventDate)
-        && distanceToRiverMeters(lat, lng, eventDate) <= corridorRadiusM;
+        && distanceToRiverMeters(lat, lng, eventDate, centerlineOverride) <= corridorRadiusM;
 }
 
 function parseGpsTrack(gpsTrack) {
@@ -279,6 +286,76 @@ function parseGpsTrack(gpsTrack) {
     } catch (error) {
         return [];
     }
+}
+
+function getValidTrackPoints(gpsTrack) {
+    return parseGpsTrack(gpsTrack).filter(point => (
+        Array.isArray(point)
+        && point.length >= 2
+        && Number.isFinite(Number(point[0]))
+        && Number.isFinite(Number(point[1]))
+    )).map(point => [Number(point[0]), Number(point[1])]);
+}
+
+function median(values) {
+    if (!Array.isArray(values) || values.length === 0) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+}
+
+function buildConsensusCenterline(groups, eventDate) {
+    const config = getMapConfig(eventDate);
+    if (!config.useConsensusCenterline) return config.riverCenterline;
+
+    const bins = new Map();
+    groups.filter(group => getEventDate(group.event_date) === getEventDate(eventDate)).forEach(group => {
+        getValidTrackPoints(group.gps_track).forEach(([lat, lng]) => {
+            if (!isMapPoint(lat, lng, eventDate)) return;
+            const binIndex = Math.floor((lat - config.bounds.south) / JULY11_ROUTE_BIN_LAT_DEGREES);
+            if (!bins.has(binIndex)) bins.set(binIndex, []);
+            bins.get(binIndex).push(lng);
+        });
+    });
+
+    const centerline = [...bins.entries()]
+        .filter(([, lngValues]) => lngValues.length >= JULY11_ROUTE_MIN_BIN_POINTS)
+        .sort(([indexA], [indexB]) => indexA - indexB)
+        .map(([binIndex, lngValues]) => [
+            config.bounds.south + (binIndex + 0.5) * JULY11_ROUTE_BIN_LAT_DEGREES,
+            median(lngValues)
+        ]);
+
+    return centerline.map((point, index) => {
+        const nearbyPoints = centerline.slice(Math.max(0, index - 2), Math.min(centerline.length, index + 3));
+        return [point[0], median(nearbyPoints.map(nearbyPoint => nearbyPoint[1]))];
+    });
+}
+
+function splitTrackIntoSegments(points, eventDate, maxJumpMeters = TRACK_SEGMENT_MAX_JUMP_M) {
+    if (!Array.isArray(points) || points.length === 0) return [];
+    const segments = [];
+    let currentSegment = [points[0]];
+
+    for (let index = 1; index < points.length; index += 1) {
+        if (distanceBetweenPointsMeters(points[index - 1], points[index], eventDate) > maxJumpMeters) {
+            if (currentSegment.length >= 2) segments.push(currentSegment);
+            currentSegment = [points[index]];
+        } else {
+            currentSegment.push(points[index]);
+        }
+    }
+    if (currentSegment.length >= 2) segments.push(currentSegment);
+    return segments;
+}
+
+function smoothTrackSegment(points, radius = 2) {
+    return points.map((point, index) => {
+        const nearbyPoints = points.slice(Math.max(0, index - radius), Math.min(points.length, index + radius + 1));
+        return [
+            median(nearbyPoints.map(nearbyPoint => nearbyPoint[0])),
+            median(nearbyPoints.map(nearbyPoint => nearbyPoint[1]))
+        ];
+    });
 }
 
 function getFallbackTrack(groupName) {
@@ -302,25 +379,34 @@ function getFallbackTrack(groupName) {
     return points;
 }
 
-function getUsableTrack(gpsTrack, groupName, eventDate = EVENT_DATE_JUNE19) {
-    const validPoints = parseGpsTrack(gpsTrack).filter(point => (
-        Array.isArray(point)
-        && point.length >= 2
-        && Number.isFinite(Number(point[0]))
-        && Number.isFinite(Number(point[1]))
-    )).map(point => [Number(point[0]), Number(point[1])]);
+function getUsableTrack(gpsTrack, groupName, eventDate = EVENT_DATE_JUNE19, centerlineOverride = null) {
+    const validPoints = getValidTrackPoints(gpsTrack);
     const inMapPoints = validPoints.filter(point => isMapPoint(point[0], point[1], eventDate));
-    const riverPoints = inMapPoints.filter(point => isRiverCorridorPoint(point[0], point[1], eventDate));
+    const config = getMapConfig(eventDate);
+    const hasUsableCenterline = (
+        Array.isArray(centerlineOverride) && centerlineOverride.length >= 2
+    ) || (
+        Array.isArray(config.riverCenterline) && config.riverCenterline.length >= 2
+    );
+    const riverPoints = hasUsableCenterline
+        ? inMapPoints.filter(point => isRiverCorridorPoint(point[0], point[1], eventDate, centerlineOverride))
+        : inMapPoints;
 
     if (riverPoints.length >= 2) {
+        const segments = splitTrackIntoSegments(riverPoints, eventDate)
+            .map(segment => smoothTrackSegment(segment));
+        const points = segments.flat();
         return {
-            points: riverPoints,
-            corrected: riverPoints.length !== validPoints.length
+            points,
+            segments,
+            corrected: points.length !== validPoints.length
         };
     }
 
+    const fallbackTrack = getFallbackTrack(groupName);
     return {
-        points: getFallbackTrack(groupName),
+        points: fallbackTrack,
+        segments: [fallbackTrack],
         corrected: true
     };
 }
@@ -404,15 +490,21 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
     const groupsData = {};
     try {
         const groups = await getGroupsWithVirtualEvents();
+        const eventCenterlines = {
+            [EVENT_DATE_JULY11]: buildConsensusCenterline(groups, EVENT_DATE_JULY11)
+        };
         for (const group of groups) {
+            const eventDate = group.event_date || EVENT_DATE_JUNE19;
+            const centerline = eventCenterlines[eventDate] || null;
             const usableTrack = group.is_event
-                ? { points: [], corrected: false }
-                : getUsableTrack(group.gps_track, group.name, group.event_date);
+                ? { points: [], segments: [], corrected: false }
+                : getUsableTrack(group.gps_track, group.name, eventDate, centerline);
             groupsData[group.id] = {
                 name: group.name,
-                event_date: group.event_date || EVENT_DATE_JUNE19,
+                event_date: eventDate,
                 is_event: Boolean(group.is_event),
                 gps_track: usableTrack.points,
+                gps_track_segments: usableTrack.segments,
                 gps_track_corrected: usableTrack.corrected,
                 selected_images: {
                     ground: getSelectedImagePath(group.id, 'ground'),
@@ -442,7 +534,7 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
                         lat = fallbackPoint.lat;
                         lng = fallbackPoint.lng;
                     }
-                } else if (!isRiverCorridorPoint(lat, lng, group.event_date)) {
+                } else if (!isRiverCorridorPoint(lat, lng, eventDate, centerline)) {
                     const timestamp = Number(det.timestamp_sec);
                     const ratio = Number.isFinite(timestamp) && maxTimestamp > minTimestamp
                         ? (timestamp - minTimestamp) / (maxTimestamp - minTimestamp)

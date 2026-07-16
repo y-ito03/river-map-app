@@ -70,24 +70,38 @@ async function checkAccess() {
 // --- 地図イラストを表示する範囲 ---
 // 緯度経度は縦方向の川として保存し、画面表示だけ時計回り90度へ変換する。
 const MAP_IMAGE_LNG_OFFSET = 0.00006;
+const BASE_MAP_SOURCE_BOUNDS = [
+    [35.0668688174732, 135.78416397658356 + MAP_IMAGE_LNG_OFFSET],
+    [35.06464445892178, 135.78518787088882 + MAP_IMAGE_LNG_OFFSET]
+];
 const mapIllustrations = {
     [EVENT_DATE_JUNE19]: {
         url: '/river_map6_landscape.jpg',
-        sourceBounds: [
-            [35.0668688174732, 135.78416397658356 + MAP_IMAGE_LNG_OFFSET],
-            [35.06464445892178, 135.78518787088882 + MAP_IMAGE_LNG_OFFSET]
-        ]
+        sourceBounds: BASE_MAP_SOURCE_BOUNDS,
+        viewSourceBounds: BASE_MAP_SOURCE_BOUNDS,
+        aspectRatio: 5484 / 2580
     },
     [EVENT_DATE_JULY11]: {
         url: '/20260711_map.png',
-        sourceBounds: [
-            [35.06805, 135.78410],
-            [35.06580, 135.78565]
-        ]
+        sourceBounds: BASE_MAP_SOURCE_BOUNDS,
+        viewSourceBounds: [
+            [35.06830, 135.78395],
+            [35.06440, 135.78580]
+        ],
+        aspectRatio: 1825 / 862
     }
 };
 
-function createMapGeometry(sourceBounds) {
+function sourcePointToDisplay(geometry, lat, lng) {
+    const x = (lng - geometry.sourceWest) / geometry.sourceLngSpan;
+    const y = (geometry.sourceNorth - lat) / geometry.sourceLatSpan;
+    return [
+        geometry.targetNorth - x * geometry.targetLatSpan,
+        geometry.targetWest + (1 - y) * geometry.targetLngSpan
+    ];
+}
+
+function createMapGeometry(sourceBounds, aspectRatio, viewSourceBounds = sourceBounds) {
     const sourceNorth = sourceBounds[0][0];
     const sourceWest = sourceBounds[0][1];
     const sourceSouth = sourceBounds[1][0];
@@ -96,12 +110,14 @@ function createMapGeometry(sourceBounds) {
     const sourceLngSpan = sourceEast - sourceWest;
     const sourceCenterLat = (sourceNorth + sourceSouth) / 2;
     const sourceCenterLng = (sourceWest + sourceEast) / 2;
+    const targetLatSpan = sourceLngSpan;
+    const targetLngSpan = aspectRatio * targetLatSpan / Math.cos(sourceCenterLat * Math.PI / 180);
     const imageBounds = [
-        [sourceCenterLat + sourceLngSpan / 2, sourceCenterLng - sourceLatSpan / 2],
-        [sourceCenterLat - sourceLngSpan / 2, sourceCenterLng + sourceLatSpan / 2]
+        [sourceCenterLat + targetLatSpan / 2, sourceCenterLng - targetLngSpan / 2],
+        [sourceCenterLat - targetLatSpan / 2, sourceCenterLng + targetLngSpan / 2]
     ];
 
-    return {
+    const geometry = {
         sourceNorth,
         sourceWest,
         sourceSouth,
@@ -114,28 +130,28 @@ function createMapGeometry(sourceBounds) {
         targetWest: imageBounds[0][1],
         targetSouth: imageBounds[1][0],
         targetEast: imageBounds[1][1],
-        targetLatSpan: imageBounds[0][0] - imageBounds[1][0],
-        targetLngSpan: imageBounds[1][1] - imageBounds[0][1]
+        targetLatSpan,
+        targetLngSpan
     };
+
+    const viewCorners = [
+        [viewSourceBounds[0][0], viewSourceBounds[0][1]],
+        [viewSourceBounds[0][0], viewSourceBounds[1][1]],
+        [viewSourceBounds[1][0], viewSourceBounds[0][1]],
+        [viewSourceBounds[1][0], viewSourceBounds[1][1]]
+    ].map(([lat, lng]) => sourcePointToDisplay(geometry, lat, lng));
+    geometry.navigationBounds = L.latLngBounds(viewCorners).pad(0.04);
+    return geometry;
 }
 
 Object.values(mapIllustrations).forEach(config => {
-    config.geometry = createMapGeometry(config.sourceBounds);
+    config.geometry = createMapGeometry(config.sourceBounds, config.aspectRatio, config.viewSourceBounds);
 });
 let currentMapIllustration = EVENT_DATE_JUNE19;
 let currentMapGeometry = mapIllustrations[currentMapIllustration].geometry;
 
 function toDisplayLatLng(lat, lng) {
-    const geometry = currentMapGeometry;
-    const x = (lng - geometry.sourceWest) / geometry.sourceLngSpan;
-    const y = (geometry.sourceNorth - lat) / geometry.sourceLatSpan;
-    const rotatedX = 1 - y;
-    const rotatedY = x;
-
-    return [
-        geometry.targetNorth - rotatedY * geometry.targetLatSpan,
-        geometry.targetWest + rotatedX * geometry.targetLngSpan
-    ];
+    return sourcePointToDisplay(currentMapGeometry, lat, lng);
 }
 
 function toSourceLatLng(lat, lng) {
@@ -155,13 +171,20 @@ function toDisplayTrack(track = []) {
     return track.map(point => toDisplayLatLng(point[0], point[1]));
 }
 
+function getTrackSegments(group) {
+    if (Array.isArray(group?.gps_track_segments) && group.gps_track_segments.length > 0) {
+        return group.gps_track_segments.filter(segment => Array.isArray(segment) && segment.length >= 2);
+    }
+    return Array.isArray(group?.gps_track) && group.gps_track.length >= 2 ? [group.gps_track] : [];
+}
+
 // --- 地図の初期化 ---
 const map = L.map('map', {
     minZoom: 17,
     maxZoom: 22,
     zoomSnap: 0.1,
     zoomDelta: 0.25,
-    maxBounds: currentMapGeometry.imageBounds,
+    maxBounds: currentMapGeometry.navigationBounds,
     maxBoundsViscosity: 1.0
 });
 
@@ -170,6 +193,14 @@ let mapImageOverlay = null;
 function fitMapToIllustration() {
     const coverZoom = map.getBoundsZoom(currentMapGeometry.imageBounds, true);
     map.setView(currentMapGeometry.allowedBounds.getCenter(), Math.max(coverZoom, map.getMinZoom()), { animate: false });
+}
+
+function fitMapToTracks(trackSegments = []) {
+    const contentBounds = L.latLngBounds(currentMapGeometry.imageBounds);
+    trackSegments.forEach(segment => {
+        toDisplayTrack(segment).forEach(point => contentBounds.extend(point));
+    });
+    map.fitBounds(contentBounds, { padding: [24, 24], animate: false });
 }
 
 function setMapIllustration(dateKey) {
@@ -182,7 +213,7 @@ function setMapIllustration(dateKey) {
 
     currentMapIllustration = nextDateKey;
     currentMapGeometry = mapIllustrations[nextDateKey].geometry;
-    map.setMaxBounds(currentMapGeometry.imageBounds);
+    map.setMaxBounds(currentMapGeometry.navigationBounds);
     mapImageOverlay = L.imageOverlay(mapIllustrations[nextDateKey].url, currentMapGeometry.imageBounds, {
         interactive: true,
         opacity: 1.0
@@ -909,19 +940,24 @@ function renderGroupData(groupId) {
         ? `${APP_TITLE} - ${JULY11_LABEL} ${getGroupDisplayName(groupId)}`
         : `${APP_TITLE} - ${getGroupDisplayName(groupId)}`;
 
-    if (data.gps_track && data.gps_track.length > 0) {
-        const line = L.polyline(toDisplayTrack(data.gps_track), getGroupStyle(data.name)).addTo(map);
+    const trackSegments = getTrackSegments(data);
+    trackSegments.forEach(segment => {
+        const line = L.polyline(toDisplayTrack(segment), getGroupStyle(data.name)).addTo(map);
         line.on('click', () => {
             openGroupReviewPanel(groupId);
         });
         currentTrackLayers.push(line);
-    }
+    });
 
     const { classNumber } = parseGroupInfo(data.name);
     renderFreePostMarkers(String(classNumber), eventDate);
     renderPostedDetectionMarkers(String(classNumber), groupId, eventDate);
     openGroupReviewPanel(groupId);
-    fitMapToIllustration();
+    if (eventDate === EVENT_DATE_JULY11 && trackSegments.length > 0) {
+        fitMapToTracks(trackSegments);
+    } else {
+        fitMapToIllustration();
+    }
     updateSidebarMenu();
 }
 
@@ -936,21 +972,26 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
         : `${APP_TITLE} - ${classNames[classFilter]}の道`;
 
     const legendItems = [];
+    const renderedSegments = [];
     Object.entries(surveyData).forEach(([groupId, group]) => {
         if (isEventGroup(groupId)) return;
-        if (!group.gps_track || group.gps_track.length === 0) return;
+        const trackSegments = getTrackSegments(group);
+        if (trackSegments.length === 0) return;
         if (!groupMatchesClass(group.name, classFilter)) return;
 
         const style = getGroupStyle(group.name);
-        const line = L.polyline(toDisplayTrack(group.gps_track), style).addTo(map);
-        line.on('click', () => {
-            openGroupReviewPanel(groupId, {
-                showSelector: true,
-                classFilter: allTracksClassFilter,
-                viewMode: 'all-records'
+        trackSegments.forEach(segment => {
+            const line = L.polyline(toDisplayTrack(segment), style).addTo(map);
+            line.on('click', () => {
+                openGroupReviewPanel(groupId, {
+                    showSelector: true,
+                    classFilter: allTracksClassFilter,
+                    viewMode: 'all-records'
+                });
             });
+            currentTrackLayers.push(line);
+            renderedSegments.push(segment);
         });
-        currentTrackLayers.push(line);
 
         legendItems.push(`
             <div class="legend-item">
@@ -980,7 +1021,7 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
         ? selectedReviewGroupId
         : getDefaultReviewGroupId(classFilter, EVENT_DATE_JUNE19);
     openGroupReviewPanel(reviewGroupId, { showSelector: true, classFilter, viewMode: 'all-records' });
-    fitMapToIllustration();
+    renderedSegments.length > 0 ? fitMapToTracks(renderedSegments) : fitMapToIllustration();
     updateSidebarMenu();
 }
 
@@ -1061,17 +1102,22 @@ function renderJuly11Layer() {
 
     const julyGroups = getSortedGroupEntries('all', EVENT_DATE_JULY11);
     const legendItems = [];
+    const renderedSegments = [];
     julyGroups.forEach(([groupId, group]) => {
-        if (!group.gps_track || group.gps_track.length === 0) return;
+        const trackSegments = getTrackSegments(group);
+        if (trackSegments.length === 0) return;
         const style = getGroupStyle(group.name);
-        const line = L.polyline(toDisplayTrack(group.gps_track), style).addTo(map);
-        line.on('click', () => {
-            openGroupReviewPanel(groupId, {
-                showSelector: true,
-                eventDate: EVENT_DATE_JULY11
+        trackSegments.forEach(segment => {
+            const line = L.polyline(toDisplayTrack(segment), style).addTo(map);
+            line.on('click', () => {
+                openGroupReviewPanel(groupId, {
+                    showSelector: true,
+                    eventDate: EVENT_DATE_JULY11
+                });
             });
+            currentTrackLayers.push(line);
+            renderedSegments.push(segment);
         });
-        currentTrackLayers.push(line);
         legendItems.push(`
             <div class="legend-item">
                 <span class="legend-line" style="border-top-color:${style.color};"></span>
@@ -1100,7 +1146,7 @@ function renderJuly11Layer() {
     } else {
         openGroupReviewPanel(JULY11_GROUP_ID);
     }
-    fitMapToIllustration();
+    renderedSegments.length > 0 ? fitMapToTracks(renderedSegments) : fitMapToIllustration();
     updateSidebarMenu();
 }
 

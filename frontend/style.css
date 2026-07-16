@@ -75,7 +75,7 @@ body, html {
   display: flex; flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden; z-index: 0;
 }
 #map {
-  flex: 1; height: 100%; transition: all 0.3s ease; z-index: 1;
+  flex: 1; height: 100%; transition: all 0.3s ease; z-index: 1; background: #d8d8d8;
 }
 
 .detail-panel {
