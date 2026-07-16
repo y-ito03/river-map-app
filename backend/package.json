@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "import-results": "node import_results.js",
+    "prepare-july11": "node prepare_july11_data.js",
+    "import-event-data": "node import_event_data.js",
     "update-gps": "node update_gps_track.js",
     "update-gps-batch": "node update_gps_tracks_batch.js",
     "test": "echo \"Error: no test specified\" && exit 1"

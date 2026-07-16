@@ -22,7 +22,8 @@ async function setupDatabase() {
         CREATE TABLE IF NOT EXISTS groups (
             id TEXT PRIMARY KEY,
             name TEXT,
-            gps_track TEXT
+            gps_track TEXT,
+            event_date TEXT DEFAULT '2026-06-19'
         );
         CREATE TABLE IF NOT EXISTS detections (
             id TEXT PRIMARY KEY,
@@ -57,6 +58,7 @@ async function setupDatabase() {
             comment TEXT,
             image_url TEXT,
             concept_image_url TEXT,
+            event_date TEXT DEFAULT '2026-06-19',
             hidden INTEGER DEFAULT 0
         );
     `);
@@ -75,8 +77,8 @@ async function setupDatabase() {
 
             // 1. グループを登録（INSERT OR IGNORE で、すでに同じ動画があれば無視する）
             await db.run(
-                "INSERT OR IGNORE INTO groups (id, name, gps_track) VALUES (?, ?, ?)",
-                [groupId, videoName, gpsTrack]
+                "INSERT OR IGNORE INTO groups (id, name, gps_track, event_date) VALUES (?, ?, ?, ?)",
+                [groupId, videoName, gpsTrack, '2026-06-19']
             );
 
             // 2. 検出データを登録

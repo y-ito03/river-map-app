@@ -68,54 +68,86 @@ async function checkAccess() {
 }
 
 // --- 地図イラストを表示する範囲 ---
-// 元データは縦向き地図の緯度経度で保存し、画面表示だけ時計回り90度へ変換する。
+// 緯度経度は縦方向の川として保存し、画面表示だけ時計回り90度へ変換する。
 const MAP_IMAGE_LNG_OFFSET = 0.00006;
-const sourceImageBounds = [
-    [35.0668688174732, 135.78416397658356 + MAP_IMAGE_LNG_OFFSET], // 左上 (北西)
-    [35.06464445892178, 135.78518787088882 + MAP_IMAGE_LNG_OFFSET]  // 右下 (南東)
-];
-const sourceNorth = sourceImageBounds[0][0];
-const sourceWest = sourceImageBounds[0][1];
-const sourceSouth = sourceImageBounds[1][0];
-const sourceEast = sourceImageBounds[1][1];
-const sourceLatSpan = sourceNorth - sourceSouth;
-const sourceLngSpan = sourceEast - sourceWest;
-const sourceCenterLat = (sourceNorth + sourceSouth) / 2;
-const sourceCenterLng = (sourceWest + sourceEast) / 2;
-const imageBounds = [
-    [sourceCenterLat + sourceLngSpan / 2, sourceCenterLng - sourceLatSpan / 2],
-    [sourceCenterLat - sourceLngSpan / 2, sourceCenterLng + sourceLatSpan / 2]
-];
-const allowedBounds = L.latLngBounds(imageBounds);
+const mapIllustrations = {
+    [EVENT_DATE_JUNE19]: {
+        url: '/river_map6_landscape.jpg',
+        sourceBounds: [
+            [35.0668688174732, 135.78416397658356 + MAP_IMAGE_LNG_OFFSET],
+            [35.06464445892178, 135.78518787088882 + MAP_IMAGE_LNG_OFFSET]
+        ]
+    },
+    [EVENT_DATE_JULY11]: {
+        url: '/20260711_map.png',
+        sourceBounds: [
+            [35.06805, 135.78410],
+            [35.06580, 135.78565]
+        ]
+    }
+};
 
-const targetNorth = imageBounds[0][0];
-const targetWest = imageBounds[0][1];
-const targetSouth = imageBounds[1][0];
-const targetEast = imageBounds[1][1];
-const targetLatSpan = targetNorth - targetSouth;
-const targetLngSpan = targetEast - targetWest;
+function createMapGeometry(sourceBounds) {
+    const sourceNorth = sourceBounds[0][0];
+    const sourceWest = sourceBounds[0][1];
+    const sourceSouth = sourceBounds[1][0];
+    const sourceEast = sourceBounds[1][1];
+    const sourceLatSpan = sourceNorth - sourceSouth;
+    const sourceLngSpan = sourceEast - sourceWest;
+    const sourceCenterLat = (sourceNorth + sourceSouth) / 2;
+    const sourceCenterLng = (sourceWest + sourceEast) / 2;
+    const imageBounds = [
+        [sourceCenterLat + sourceLngSpan / 2, sourceCenterLng - sourceLatSpan / 2],
+        [sourceCenterLat - sourceLngSpan / 2, sourceCenterLng + sourceLatSpan / 2]
+    ];
+
+    return {
+        sourceNorth,
+        sourceWest,
+        sourceSouth,
+        sourceEast,
+        sourceLatSpan,
+        sourceLngSpan,
+        imageBounds,
+        allowedBounds: L.latLngBounds(imageBounds),
+        targetNorth: imageBounds[0][0],
+        targetWest: imageBounds[0][1],
+        targetSouth: imageBounds[1][0],
+        targetEast: imageBounds[1][1],
+        targetLatSpan: imageBounds[0][0] - imageBounds[1][0],
+        targetLngSpan: imageBounds[1][1] - imageBounds[0][1]
+    };
+}
+
+Object.values(mapIllustrations).forEach(config => {
+    config.geometry = createMapGeometry(config.sourceBounds);
+});
+let currentMapIllustration = EVENT_DATE_JUNE19;
+let currentMapGeometry = mapIllustrations[currentMapIllustration].geometry;
 
 function toDisplayLatLng(lat, lng) {
-    const x = (lng - sourceWest) / sourceLngSpan;
-    const y = (sourceNorth - lat) / sourceLatSpan;
+    const geometry = currentMapGeometry;
+    const x = (lng - geometry.sourceWest) / geometry.sourceLngSpan;
+    const y = (geometry.sourceNorth - lat) / geometry.sourceLatSpan;
     const rotatedX = 1 - y;
     const rotatedY = x;
 
     return [
-        targetNorth - rotatedY * targetLatSpan,
-        targetWest + rotatedX * targetLngSpan
+        geometry.targetNorth - rotatedY * geometry.targetLatSpan,
+        geometry.targetWest + rotatedX * geometry.targetLngSpan
     ];
 }
 
 function toSourceLatLng(lat, lng) {
-    const rotatedX = (lng - targetWest) / targetLngSpan;
-    const rotatedY = (targetNorth - lat) / targetLatSpan;
+    const geometry = currentMapGeometry;
+    const rotatedX = (lng - geometry.targetWest) / geometry.targetLngSpan;
+    const rotatedY = (geometry.targetNorth - lat) / geometry.targetLatSpan;
     const x = rotatedY;
     const y = 1 - rotatedX;
 
     return {
-        lat: sourceNorth - y * sourceLatSpan,
-        lng: sourceWest + x * sourceLngSpan
+        lat: geometry.sourceNorth - y * geometry.sourceLatSpan,
+        lng: geometry.sourceWest + x * geometry.sourceLngSpan
     };
 }
 
@@ -129,20 +161,15 @@ const map = L.map('map', {
     maxZoom: 22,
     zoomSnap: 0.1,
     zoomDelta: 0.25,
-    maxBounds: imageBounds,
+    maxBounds: currentMapGeometry.imageBounds,
     maxBoundsViscosity: 1.0
 });
 
-const mapIllustrations = {
-    [EVENT_DATE_JUNE19]: '/river_map6_landscape.jpg',
-    [EVENT_DATE_JULY11]: '/20260711_map.png'
-};
-let currentMapIllustration = EVENT_DATE_JUNE19;
 let mapImageOverlay = null;
 
 function fitMapToIllustration() {
-    const coverZoom = map.getBoundsZoom(imageBounds, true);
-    map.setView(allowedBounds.getCenter(), Math.max(coverZoom, map.getMinZoom()), { animate: false });
+    const coverZoom = map.getBoundsZoom(currentMapGeometry.imageBounds, true);
+    map.setView(currentMapGeometry.allowedBounds.getCenter(), Math.max(coverZoom, map.getMinZoom()), { animate: false });
 }
 
 function setMapIllustration(dateKey) {
@@ -154,7 +181,9 @@ function setMapIllustration(dateKey) {
     }
 
     currentMapIllustration = nextDateKey;
-    mapImageOverlay = L.imageOverlay(mapIllustrations[nextDateKey], imageBounds, {
+    currentMapGeometry = mapIllustrations[nextDateKey].geometry;
+    map.setMaxBounds(currentMapGeometry.imageBounds);
+    mapImageOverlay = L.imageOverlay(mapIllustrations[nextDateKey].url, currentMapGeometry.imageBounds, {
         interactive: true,
         opacity: 1.0
     }).addTo(map);
@@ -355,6 +384,15 @@ function getDisplayGroupName(groupName) {
     return `${classNames[classNumber] || `Class ${classNumber}`} ${teamLabel}班`;
 }
 
+function getGroupDisplayName(groupId) {
+    const group = surveyData[groupId];
+    if (!group) return '';
+    if (group.event_date === EVENT_DATE_JULY11 && groupId !== JULY11_GROUP_ID) {
+        return `${parseGroupInfo(group.name).teamLabel}班`;
+    }
+    return getDisplayGroupName(group.name);
+}
+
 function getGroupStyle(groupName) {
     const { classNumber, teamNumber } = parseGroupInfo(groupName);
     return {
@@ -380,6 +418,10 @@ function groupMatchesClass(groupName, classFilter) {
 function isEventGroup(groupId) {
     const group = surveyData[groupId];
     return groupId === JULY11_GROUP_ID || group?.event_date === EVENT_DATE_JULY11 || group?.is_event === true;
+}
+
+function isEventOverview(groupId) {
+    return groupId === JULY11_GROUP_ID || surveyData[groupId]?.is_event === true;
 }
 
 function getPostEventDate(post) {
@@ -631,9 +673,13 @@ function renderDetectionReviewCard(det) {
     `;
 }
 
-function getSortedGroupEntries(classFilter = 'all') {
+function getSortedGroupEntries(classFilter = 'all', eventDate = EVENT_DATE_JUNE19) {
     return Object.entries(surveyData)
-        .filter(([groupId, group]) => !isEventGroup(groupId) && groupMatchesClass(group.name, classFilter))
+        .filter(([groupId, group]) => (
+            !isEventOverview(groupId)
+            && (group.event_date || EVENT_DATE_JUNE19) === eventDate
+            && (eventDate === EVENT_DATE_JULY11 || groupMatchesClass(group.name, classFilter))
+        ))
         .sort(([, a], [, b]) => {
             const infoA = parseGroupInfo(a.name);
             const infoB = parseGroupInfo(b.name);
@@ -641,8 +687,9 @@ function getSortedGroupEntries(classFilter = 'all') {
         });
 }
 
-function getDefaultReviewGroupId(classFilter = 'all') {
-    const entries = getSortedGroupEntries(classFilter);
+function getDefaultReviewGroupId(classFilter = 'all', eventDate = EVENT_DATE_JUNE19) {
+    const entries = getSortedGroupEntries(classFilter, eventDate);
+    if (eventDate === EVENT_DATE_JULY11) return entries[0]?.[0] || null;
     const davisOne = entries.find(([, group]) => {
         const info = parseGroupInfo(group.name);
         return info.classNumber === 1 && info.teamNumber === 1;
@@ -650,8 +697,8 @@ function getDefaultReviewGroupId(classFilter = 'all') {
     return (davisOne || entries[0])?.[0] || null;
 }
 
-function renderGroupSelector(selectedGroupId, classFilter) {
-    const groups = getSortedGroupEntries(classFilter);
+function renderGroupSelector(selectedGroupId, classFilter, eventDate = EVENT_DATE_JUNE19) {
+    const groups = getSortedGroupEntries(classFilter, eventDate);
     if (groups.length === 0) return '';
 
     return `
@@ -660,7 +707,7 @@ function renderGroupSelector(selectedGroupId, classFilter) {
             <select id="review-group-select" class="track-filter">
                 ${groups.map(([groupId, group]) => `
                     <option value="${escapeHtml(groupId)}" ${groupId === selectedGroupId ? 'selected' : ''}>
-                        ${escapeHtml(getDisplayGroupName(group.name))}
+                        ${escapeHtml(getGroupDisplayName(groupId))}
                     </option>
                 `).join('')}
             </select>
@@ -690,7 +737,7 @@ function renderGroupReviewHTML(groupId, options = {}) {
 
     return `
         <div class="review-panel">
-            ${options.showSelector ? renderGroupSelector(groupId, options.classFilter || 'all') : ''}
+            ${options.showSelector ? renderGroupSelector(groupId, options.classFilter || 'all', options.eventDate || group.event_date) : ''}
             ${isAllRecordsView ? '' : `<button type="button" class="panel-post-btn" data-group-id="${escapeHtml(groupId)}">${postButtonLabel}</button>`}
             ${isAllRecordsView ? '' : `
                 <section class="review-section">
@@ -737,9 +784,11 @@ function openGroupReviewPanel(groupId, options = {}) {
     lastPanelOptions = { ...options };
     const panel = document.getElementById('detail-panel');
     const content = document.getElementById('panel-content');
-    const panelTitle = isEventGroup(groupId)
+    const panelTitle = isEventOverview(groupId)
         ? `${JULY11_LABEL}の確認`
-        : `${getDisplayGroupName(surveyData[groupId].name)} の確認`;
+        : surveyData[groupId]?.event_date === EVENT_DATE_JULY11
+            ? `${JULY11_LABEL} ${getGroupDisplayName(groupId)}の確認`
+            : `${getGroupDisplayName(groupId)} の確認`;
     document.getElementById('panel-title').innerText = panelTitle;
     content.innerHTML = renderGroupReviewHTML(groupId, options);
     panel.classList.remove('hidden');
@@ -817,11 +866,13 @@ function renderFreePostMarkers(classFilter = 'all', eventDate = EVENT_DATE_JUNE1
     });
 }
 
-function renderPostedDetectionMarkers(classFilter = 'all', targetGroupId = null) {
+function renderPostedDetectionMarkers(classFilter = 'all', targetGroupId = null, eventDate = EVENT_DATE_JUNE19) {
     Object.entries(surveyData).forEach(([groupId, group]) => {
         if (targetGroupId && groupId !== targetGroupId) return;
-        if (!targetGroupId && isEventGroup(groupId)) return;
-        if (!groupMatchesClass(group.name, classFilter) || !group.detections) return;
+        if (isEventOverview(groupId)) return;
+        if (!targetGroupId && (group.event_date || EVENT_DATE_JUNE19) !== eventDate) return;
+        if (eventDate === EVENT_DATE_JUNE19 && !groupMatchesClass(group.name, classFilter)) return;
+        if (!group.detections) return;
 
         group.detections.forEach(det => {
             if (!det.user_posts || det.user_posts.length === 0) return;
@@ -841,19 +892,22 @@ function renderPostedDetectionMarkers(classFilter = 'all', targetGroupId = null)
 }
 
 function renderGroupData(groupId) {
-    if (isEventGroup(groupId)) {
+    if (isEventOverview(groupId)) {
         renderJuly11Layer();
         return;
     }
 
-    setFreePostMode(false);
-    setMapIllustration(EVENT_DATE_JUNE19);
-    currentGroupId = groupId;
     const data = surveyData[groupId];
     if (!data) return;
+    const eventDate = data.event_date || EVENT_DATE_JUNE19;
+    setFreePostMode(false);
+    setMapIllustration(eventDate);
+    currentGroupId = groupId;
 
     clearMap();
-    document.querySelector('.title').innerText = `${APP_TITLE} - ${getDisplayGroupName(data.name)}`;
+    document.querySelector('.title').innerText = eventDate === EVENT_DATE_JULY11
+        ? `${APP_TITLE} - ${JULY11_LABEL} ${getGroupDisplayName(groupId)}`
+        : `${APP_TITLE} - ${getGroupDisplayName(groupId)}`;
 
     if (data.gps_track && data.gps_track.length > 0) {
         const line = L.polyline(toDisplayTrack(data.gps_track), getGroupStyle(data.name)).addTo(map);
@@ -864,8 +918,8 @@ function renderGroupData(groupId) {
     }
 
     const { classNumber } = parseGroupInfo(data.name);
-    renderFreePostMarkers(String(classNumber));
-    renderPostedDetectionMarkers(String(classNumber), groupId);
+    renderFreePostMarkers(String(classNumber), eventDate);
+    renderPostedDetectionMarkers(String(classNumber), groupId, eventDate);
     openGroupReviewPanel(groupId);
     fitMapToIllustration();
     updateSidebarMenu();
@@ -883,6 +937,7 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
 
     const legendItems = [];
     Object.entries(surveyData).forEach(([groupId, group]) => {
+        if (isEventGroup(groupId)) return;
         if (!group.gps_track || group.gps_track.length === 0) return;
         if (!groupMatchesClass(group.name, classFilter)) return;
 
@@ -900,7 +955,7 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
         legendItems.push(`
             <div class="legend-item">
                 <span class="legend-line ${getLegendLineClass(group.name)}" style="border-top-color:${style.color};"></span>
-                <span>${escapeHtml(getDisplayGroupName(group.name))}</span>
+                <span>${escapeHtml(getGroupDisplayName(groupId))}</span>
             </div>
         `);
     });
@@ -923,7 +978,7 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
     });
     const reviewGroupId = selectedReviewGroupId && surveyData[selectedReviewGroupId] && groupMatchesClass(surveyData[selectedReviewGroupId].name, classFilter)
         ? selectedReviewGroupId
-        : getDefaultReviewGroupId(classFilter);
+        : getDefaultReviewGroupId(classFilter, EVENT_DATE_JUNE19);
     openGroupReviewPanel(reviewGroupId, { showSelector: true, classFilter, viewMode: 'all-records' });
     fitMapToIllustration();
     updateSidebarMenu();
@@ -1002,12 +1057,49 @@ function renderJuly11Layer() {
     clearMap();
     setMapIllustration(EVENT_DATE_JULY11);
     currentGroupId = JULY11_GROUP_ID;
-    selectedReviewGroupId = null;
-    lastPanelGroupId = null;
     document.querySelector('.title').innerText = `${APP_TITLE} - ${JULY11_LABEL}`;
+
+    const julyGroups = getSortedGroupEntries('all', EVENT_DATE_JULY11);
+    const legendItems = [];
+    julyGroups.forEach(([groupId, group]) => {
+        if (!group.gps_track || group.gps_track.length === 0) return;
+        const style = getGroupStyle(group.name);
+        const line = L.polyline(toDisplayTrack(group.gps_track), style).addTo(map);
+        line.on('click', () => {
+            openGroupReviewPanel(groupId, {
+                showSelector: true,
+                eventDate: EVENT_DATE_JULY11
+            });
+        });
+        currentTrackLayers.push(line);
+        legendItems.push(`
+            <div class="legend-item">
+                <span class="legend-line" style="border-top-color:${style.color};"></span>
+                <span>${escapeHtml(getGroupDisplayName(groupId))}</span>
+            </div>
+        `);
+    });
+
     renderFreePostMarkers('all', EVENT_DATE_JULY11);
-    renderPostedDetectionMarkers('all', JULY11_GROUP_ID);
-    openGroupReviewPanel(JULY11_GROUP_ID);
+    renderPostedDetectionMarkers('all', null, EVENT_DATE_JULY11);
+    if (legendItems.length > 0) {
+        legendPanel.innerHTML = `<h3>色と線の見方</h3>${legendItems.join('')}`;
+        legendPanel.classList.remove('hidden');
+    }
+
+    const reviewGroupId = selectedReviewGroupId
+        && surveyData[selectedReviewGroupId]?.event_date === EVENT_DATE_JULY11
+        && !isEventOverview(selectedReviewGroupId)
+        ? selectedReviewGroupId
+        : getDefaultReviewGroupId('all', EVENT_DATE_JULY11);
+    if (reviewGroupId) {
+        openGroupReviewPanel(reviewGroupId, {
+            showSelector: true,
+            eventDate: EVENT_DATE_JULY11
+        });
+    } else {
+        openGroupReviewPanel(JULY11_GROUP_ID);
+    }
     fitMapToIllustration();
     updateSidebarMenu();
 }
@@ -1182,11 +1274,11 @@ function updateSidebarMenu() {
             const btn = document.createElement('button');
             btn.className = 'nav-btn group-btn';
             btn.dataset.group = groupId;
-            btn.innerText = `${getDisplayGroupName(group.name)} の記録`;
+            btn.innerText = `${getGroupDisplayName(groupId)} の記録`;
 
             btn.addEventListener('click', () => {
                 renderGroupData(groupId);
-                document.querySelector('.title').innerText = `${APP_TITLE} - ${getDisplayGroupName(group.name)}`;
+                document.querySelector('.title').innerText = `${APP_TITLE} - ${getGroupDisplayName(groupId)}`;
                 document.getElementById('sidebar').classList.add('hidden');
             });
 
@@ -1211,16 +1303,41 @@ function updateSidebarMenu() {
     sidebarList.appendChild(liJune19);
 
     const liJuly11 = document.createElement('li');
+    const july11Details = document.createElement('details');
+    july11Details.id = 'menu-date-2026-07-11';
+    july11Details.className = 'menu-details date-menu-details';
+    july11Details.open = currentGroupId === JULY11_GROUP_ID
+        || surveyData[currentGroupId]?.event_date === EVENT_DATE_JULY11;
+
+    const july11Summary = document.createElement('summary');
+    july11Summary.innerText = JULY11_LABEL;
+    july11Details.appendChild(july11Summary);
+
     const btnJuly11 = document.createElement('button');
     btnJuly11.id = 'btn-july-2026';
-    btnJuly11.className = 'nav-btn';
-    btnJuly11.innerText = JULY11_LABEL;
+    btnJuly11.className = 'nav-btn group-btn';
+    btnJuly11.innerText = 'すべての班の記録を見る';
     btnJuly11.classList.toggle('active', currentGroupId === JULY11_GROUP_ID);
     btnJuly11.addEventListener('click', () => {
         renderJuly11Layer();
         document.getElementById('sidebar').classList.add('hidden');
     });
-    liJuly11.appendChild(btnJuly11);
+    july11Details.appendChild(btnJuly11);
+
+    getSortedGroupEntries('all', EVENT_DATE_JULY11).forEach(([groupId]) => {
+        const btn = document.createElement('button');
+        btn.className = 'nav-btn group-btn';
+        btn.dataset.group = groupId;
+        btn.innerText = `${getGroupDisplayName(groupId)} の記録`;
+        btn.classList.toggle('active', currentGroupId === groupId);
+        btn.addEventListener('click', () => {
+            renderGroupData(groupId);
+            document.getElementById('sidebar').classList.add('hidden');
+        });
+        july11Details.appendChild(btn);
+    });
+
+    liJuly11.appendChild(july11Details);
     sidebarList.appendChild(liJuly11);
 
     const liAllTracks = document.createElement('li');
@@ -1243,7 +1360,7 @@ function updateSidebarMenu() {
     btnFreePost.innerText = '投稿する場所を選ぶ';
     btnFreePost.addEventListener('click', () => {
         setMapIllustration(EVENT_DATE_JUNE19);
-        if (currentGroupId === JULY11_GROUP_ID) {
+        if (isEventGroup(currentGroupId)) {
             currentGroupId = null;
             clearMap();
             fitMapToIllustration();
@@ -1334,7 +1451,7 @@ window.onPostCancelled = function() {
 map.on('click', (event) => {
     if (!freePostMode) return;
 
-    if (!allowedBounds.contains(event.latlng)) {
+    if (!currentMapGeometry.allowedBounds.contains(event.latlng)) {
         alert("とうこうできるのは、地図の中だけです。");
         return;
     }
@@ -1382,9 +1499,11 @@ document.addEventListener('click', (event) => {
 document.addEventListener('change', async (event) => {
     const reviewGroupSelect = event.target.closest('#review-group-select');
     if (reviewGroupSelect) {
+        const selectedEventDate = surveyData[reviewGroupSelect.value]?.event_date || EVENT_DATE_JUNE19;
         openGroupReviewPanel(reviewGroupSelect.value, {
             showSelector: true,
             classFilter: allTracksClassFilter,
+            eventDate: selectedEventDate,
             viewMode: currentGroupId === 'all-tracks' ? 'all-records' : undefined
         });
     }
@@ -1407,9 +1526,12 @@ document.addEventListener('click', async (event) => {
         saveButton.innerText = '保存中...';
         try {
             await updateDetectionLabel(saveButton.dataset.detectionId, creatures);
+            const selectedEventDate = surveyData[selectedReviewGroupId]?.event_date || EVENT_DATE_JUNE19;
             openGroupReviewPanel(selectedReviewGroupId, {
-                showSelector: currentGroupId === 'all-tracks',
-                classFilter: allTracksClassFilter
+                showSelector: currentGroupId === 'all-tracks' || selectedEventDate === EVENT_DATE_JULY11,
+                classFilter: allTracksClassFilter,
+                eventDate: selectedEventDate,
+                viewMode: currentGroupId === 'all-tracks' ? 'all-records' : undefined
             });
         } catch (error) {
             alert(error.message);

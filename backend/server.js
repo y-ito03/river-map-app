@@ -40,24 +40,46 @@ const JULY11_GROUP = {
     event_date: EVENT_DATE_JULY11,
     is_event: 1
 };
-const MAP_SOURCE_BOUNDS = {
-    north: 35.0668688174732,
-    south: 35.06464445892178,
-    west: 135.78416397658356 + 0.00006,
-    east: 135.78518787088882 + 0.00006
-};
-const MAP_CENTER_LAT = (MAP_SOURCE_BOUNDS.north + MAP_SOURCE_BOUNDS.south) / 2;
 const METERS_PER_DEGREE_LAT = 111320;
-const METERS_PER_DEGREE_LNG = METERS_PER_DEGREE_LAT * Math.cos(MAP_CENTER_LAT * Math.PI / 180);
 const RIVER_CORRIDOR_RADIUS_M = Number(process.env.RIVER_CORRIDOR_RADIUS_M || 25);
-const RIVER_CENTERLINE = [
-    [35.06678, 135.78470],
-    [35.06635, 135.78472],
-    [35.06595, 135.78480],
-    [35.06555, 135.78478],
-    [35.06515, 135.78472],
-    [35.06475, 135.78466]
-];
+const JULY11_RIVER_CORRIDOR_RADIUS_M = Number(process.env.JULY11_RIVER_CORRIDOR_RADIUS_M || 5);
+const MAP_CONFIGS = {
+    [EVENT_DATE_JUNE19]: {
+        bounds: {
+            north: 35.0668688174732,
+            south: 35.06464445892178,
+            west: 135.78416397658356 + 0.00006,
+            east: 135.78518787088882 + 0.00006
+        },
+        corridorRadiusM: RIVER_CORRIDOR_RADIUS_M,
+        riverCenterline: [
+            [35.06678, 135.78470],
+            [35.06635, 135.78472],
+            [35.06595, 135.78480],
+            [35.06555, 135.78478],
+            [35.06515, 135.78472],
+            [35.06475, 135.78466]
+        ]
+    },
+    [EVENT_DATE_JULY11]: {
+        bounds: {
+            north: 35.06805,
+            south: 35.06580,
+            west: 135.78410,
+            east: 135.78565
+        },
+        corridorRadiusM: JULY11_RIVER_CORRIDOR_RADIUS_M,
+        riverCenterline: [
+            [35.06590, 135.78455],
+            [35.06625, 135.78472],
+            [35.06660, 135.78490],
+            [35.06695, 135.78508],
+            [35.06730, 135.78525],
+            [35.06760, 135.78538],
+            [35.06795, 135.78552]
+        ]
+    }
+};
 const CLASS_LETTER_TO_NUMBER = { d: 1, h: 2, l: 3 };
 const CLASS_NAME_TO_NUMBER = { davis: 1, hardy: 2, learned: 3 };
 const TEAM_LETTER_TO_NUMBER = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7 };
@@ -78,24 +100,32 @@ function getVirtualGroups() {
 }
 
 async function getGroupsWithVirtualEvents() {
-    const groups = await db.all("SELECT id, name, gps_track, ? AS event_date, 0 AS is_event FROM groups ORDER BY name ASC", EVENT_DATE_JUNE19);
+    const groups = await db.all(
+        "SELECT id, name, gps_track, COALESCE(event_date, ?) AS event_date, 0 AS is_event FROM groups ORDER BY event_date ASC, name ASC",
+        EVENT_DATE_JUNE19
+    );
     return [...groups, ...getVirtualGroups()];
 }
 
 async function getGroupWithVirtualEvent(groupId) {
     if (isVirtualGroupId(groupId)) return { ...JULY11_GROUP };
-    return db.get("SELECT id, name, gps_track, ? AS event_date, 0 AS is_event FROM groups WHERE id = ?", EVENT_DATE_JUNE19, groupId);
+    return db.get(
+        "SELECT id, name, gps_track, COALESCE(event_date, ?) AS event_date, 0 AS is_event FROM groups WHERE id = ?",
+        EVENT_DATE_JUNE19,
+        groupId
+    );
 }
 
 function getDefaultPointForGroup(group) {
     if (group?.is_event) {
+        const { bounds } = getMapConfig(group.event_date);
         return {
-            lat: (MAP_SOURCE_BOUNDS.north + MAP_SOURCE_BOUNDS.south) / 2,
-            lng: (MAP_SOURCE_BOUNDS.west + MAP_SOURCE_BOUNDS.east) / 2
+            lat: (bounds.north + bounds.south) / 2,
+            lng: (bounds.west + bounds.east) / 2
         };
     }
 
-    return getDefaultGroupPoint(group?.gps_track, group?.name);
+    return getDefaultGroupPoint(group?.gps_track, group?.name, group?.event_date);
 }
 
 function getAccessCode(req) {
@@ -182,27 +212,35 @@ function parseGroupInfo(groupName) {
     };
 }
 
-function isMapPoint(lat, lng) {
+function getMapConfig(eventDate = EVENT_DATE_JUNE19) {
+    return MAP_CONFIGS[getEventDate(eventDate)] || MAP_CONFIGS[EVENT_DATE_JUNE19];
+}
+
+function isMapPoint(lat, lng, eventDate = EVENT_DATE_JUNE19) {
+    const { bounds } = getMapConfig(eventDate);
     const margin = 0.00035;
     return Number.isFinite(lat)
         && Number.isFinite(lng)
-        && lat <= MAP_SOURCE_BOUNDS.north + margin
-        && lat >= MAP_SOURCE_BOUNDS.south - margin
-        && lng >= MAP_SOURCE_BOUNDS.west - margin
-        && lng <= MAP_SOURCE_BOUNDS.east + margin;
+        && lat <= bounds.north + margin
+        && lat >= bounds.south - margin
+        && lng >= bounds.west - margin
+        && lng <= bounds.east + margin;
 }
 
-function toLocalMeters(point) {
+function toLocalMeters(point, eventDate = EVENT_DATE_JUNE19) {
+    const { bounds } = getMapConfig(eventDate);
+    const centerLat = (bounds.north + bounds.south) / 2;
+    const metersPerDegreeLng = METERS_PER_DEGREE_LAT * Math.cos(centerLat * Math.PI / 180);
     return {
-        x: (point[1] - MAP_SOURCE_BOUNDS.west) * METERS_PER_DEGREE_LNG,
-        y: (point[0] - MAP_SOURCE_BOUNDS.south) * METERS_PER_DEGREE_LAT
+        x: (point[1] - bounds.west) * metersPerDegreeLng,
+        y: (point[0] - bounds.south) * METERS_PER_DEGREE_LAT
     };
 }
 
-function distancePointToSegmentMeters(point, segmentStart, segmentEnd) {
-    const p = toLocalMeters(point);
-    const a = toLocalMeters(segmentStart);
-    const b = toLocalMeters(segmentEnd);
+function distancePointToSegmentMeters(point, segmentStart, segmentEnd, eventDate = EVENT_DATE_JUNE19) {
+    const p = toLocalMeters(point, eventDate);
+    const a = toLocalMeters(segmentStart, eventDate);
+    const b = toLocalMeters(segmentEnd, eventDate);
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const lengthSquared = dx * dx + dy * dy;
@@ -215,20 +253,23 @@ function distancePointToSegmentMeters(point, segmentStart, segmentEnd) {
     return Math.hypot(p.x - closestX, p.y - closestY);
 }
 
-function distanceToRiverMeters(lat, lng) {
+function distanceToRiverMeters(lat, lng, eventDate = EVENT_DATE_JUNE19) {
+    const { riverCenterline } = getMapConfig(eventDate);
     let minDistance = Infinity;
     const point = [lat, lng];
-    for (let index = 0; index < RIVER_CENTERLINE.length - 1; index += 1) {
+    for (let index = 0; index < riverCenterline.length - 1; index += 1) {
         minDistance = Math.min(
             minDistance,
-            distancePointToSegmentMeters(point, RIVER_CENTERLINE[index], RIVER_CENTERLINE[index + 1])
+            distancePointToSegmentMeters(point, riverCenterline[index], riverCenterline[index + 1], eventDate)
         );
     }
     return minDistance;
 }
 
-function isRiverCorridorPoint(lat, lng) {
-    return isMapPoint(lat, lng) && distanceToRiverMeters(lat, lng) <= RIVER_CORRIDOR_RADIUS_M;
+function isRiverCorridorPoint(lat, lng, eventDate = EVENT_DATE_JUNE19) {
+    const { corridorRadiusM } = getMapConfig(eventDate);
+    return isMapPoint(lat, lng, eventDate)
+        && distanceToRiverMeters(lat, lng, eventDate) <= corridorRadiusM;
 }
 
 function parseGpsTrack(gpsTrack) {
@@ -261,15 +302,15 @@ function getFallbackTrack(groupName) {
     return points;
 }
 
-function getUsableTrack(gpsTrack, groupName) {
+function getUsableTrack(gpsTrack, groupName, eventDate = EVENT_DATE_JUNE19) {
     const validPoints = parseGpsTrack(gpsTrack).filter(point => (
         Array.isArray(point)
         && point.length >= 2
         && Number.isFinite(Number(point[0]))
         && Number.isFinite(Number(point[1]))
     )).map(point => [Number(point[0]), Number(point[1])]);
-    const inMapPoints = validPoints.filter(point => isMapPoint(point[0], point[1]));
-    const riverPoints = inMapPoints.filter(point => isRiverCorridorPoint(point[0], point[1]));
+    const inMapPoints = validPoints.filter(point => isMapPoint(point[0], point[1], eventDate));
+    const riverPoints = inMapPoints.filter(point => isRiverCorridorPoint(point[0], point[1], eventDate));
 
     if (riverPoints.length >= 2) {
         return {
@@ -296,8 +337,8 @@ function getTrackPointByRatio(track, ratio) {
     };
 }
 
-function getDefaultGroupPoint(gpsTrack, groupName = '') {
-    const { points } = getUsableTrack(gpsTrack, groupName);
+function getDefaultGroupPoint(gpsTrack, groupName = '', eventDate = EVENT_DATE_JUNE19) {
+    const { points } = getUsableTrack(gpsTrack, groupName, eventDate);
     return getTrackPointByRatio(points, 0.5);
 }
 
@@ -366,7 +407,7 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
         for (const group of groups) {
             const usableTrack = group.is_event
                 ? { points: [], corrected: false }
-                : getUsableTrack(group.gps_track, group.name);
+                : getUsableTrack(group.gps_track, group.name, group.event_date);
             groupsData[group.id] = {
                 name: group.name,
                 event_date: group.event_date || EVENT_DATE_JUNE19,
@@ -401,7 +442,7 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
                         lat = fallbackPoint.lat;
                         lng = fallbackPoint.lng;
                     }
-                } else if (!isRiverCorridorPoint(lat, lng)) {
+                } else if (!isRiverCorridorPoint(lat, lng, group.event_date)) {
                     const timestamp = Number(det.timestamp_sec);
                     const ratio = Number.isFinite(timestamp) && maxTimestamp > minTimestamp
                         ? (timestamp - minTimestamp) / (maxTimestamp - minTimestamp)
@@ -904,6 +945,26 @@ async function addColumnIfMissing(tableName, columnName, columnDefinition) {
 
 async function ensureSchema() {
     await db.exec(`
+        CREATE TABLE IF NOT EXISTS groups (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            gps_track TEXT,
+            event_date TEXT DEFAULT '2026-06-19'
+        );
+
+        CREATE TABLE IF NOT EXISTS detections (
+            id TEXT PRIMARY KEY,
+            group_id TEXT,
+            class_name TEXT,
+            verified_class_name TEXT,
+            confidence REAL,
+            lat REAL,
+            lng REAL,
+            timestamp_sec REAL,
+            thumbnail_path TEXT,
+            hidden INTEGER DEFAULT 0
+        );
+
         CREATE TABLE IF NOT EXISTS user_posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             detection_id TEXT,
@@ -926,9 +987,11 @@ async function ensureSchema() {
             comment TEXT,
             image_url TEXT,
             concept_image_url TEXT,
+            event_date TEXT DEFAULT '2026-06-19',
             hidden INTEGER DEFAULT 0
         );
     `);
+    await addColumnIfMissing('groups', 'event_date', `TEXT DEFAULT '${EVENT_DATE_JUNE19}'`);
     await addColumnIfMissing('detections', 'verified_class_name', 'TEXT');
     await addColumnIfMissing('detections', 'hidden', 'INTEGER DEFAULT 0');
     await addColumnIfMissing('user_posts', 'concept_image_url', 'TEXT');

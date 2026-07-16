@@ -26,7 +26,8 @@ async function ensureImportSchema(db) {
         CREATE TABLE IF NOT EXISTS groups (
             id TEXT PRIMARY KEY,
             name TEXT,
-            gps_track TEXT
+            gps_track TEXT,
+            event_date TEXT DEFAULT '2026-06-19'
         );
 
         CREATE TABLE IF NOT EXISTS detections (
@@ -44,6 +45,10 @@ async function ensureImportSchema(db) {
     `);
 
     const columns = await db.all('PRAGMA table_info(detections)');
+    const groupColumns = await db.all('PRAGMA table_info(groups)');
+    if (!groupColumns.some(column => column.name === 'event_date')) {
+        await db.exec("ALTER TABLE groups ADD COLUMN event_date TEXT DEFAULT '2026-06-19'");
+    }
     if (!columns.some(column => column.name === 'verified_class_name')) {
         await db.exec('ALTER TABLE detections ADD COLUMN verified_class_name TEXT');
     }
@@ -76,10 +81,11 @@ async function importResults() {
             const existingGroup = await db.get('SELECT id FROM groups WHERE id = ?', groupId);
             if (!existingGroup) {
                 await db.run(
-                    'INSERT INTO groups (id, name, gps_track) VALUES (?, ?, ?)',
+                    'INSERT INTO groups (id, name, gps_track, event_date) VALUES (?, ?, ?, ?)',
                     groupId,
                     groupName,
-                    gpsTrack
+                    gpsTrack,
+                    '2026-06-19'
                 );
                 insertedGroups += 1;
             }
