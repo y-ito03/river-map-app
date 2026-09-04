@@ -53,6 +53,7 @@ async function setupDatabase() {
             lat REAL,
             lng REAL,
             class_number INTEGER,
+            group_id TEXT,
             nickname TEXT,
             creature TEXT,
             comment TEXT,

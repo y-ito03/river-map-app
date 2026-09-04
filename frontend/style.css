@@ -106,7 +106,8 @@ body, html {
 /* ヒートマップ集計パネル */
 .summary-panel {
   position: absolute; top: 60px; right: 20px; background-color: rgba(255, 255, 255, 0.95);
-  padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1000; min-width: 180px;
+  padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1000;
+  width: min(320px, calc(100vw - 40px)); max-height: calc(100dvh - 90px); overflow-y: auto; box-sizing: border-box;
 }
 .summary-panel.hidden { display: none; }
 .summary-panel h3 { margin: 0 0 10px 0; font-size: 1.1em; border-bottom: 2px solid #FF9800; padding-bottom: 5px; }
@@ -116,9 +117,16 @@ body, html {
   width: 100%; padding: 8px; margin-bottom: 10px; font-size: 1em;
   border: 1px solid #ccc; border-radius: 4px; background-color: #fff; cursor: pointer;
 }
-
-.summary-panel ul { list-style: none; padding: 0; margin: 0; }
-.summary-panel li { margin-bottom: 8px; font-size: 1.1em; font-weight: bold; color: #333; }
+.summary-filter-label { display: block; margin-bottom: 5px; color: #333; font-size: 0.88rem; font-weight: bold; }
+.summary-chart { display: grid; gap: 10px; margin-top: 4px; }
+.summary-chart-row { display: grid; gap: 4px; padding: 4px; border: 2px solid transparent; border-radius: 6px; }
+.summary-chart-row.is-selected { border-color: #2e7d32; background: #e8f5e9; }
+.summary-chart-label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 0.85rem; }
+.summary-chart-label span { min-width: 0; overflow-wrap: anywhere; }
+.summary-chart-label strong { flex: 0 0 auto; font-size: 0.78rem; }
+.summary-chart-track { height: 12px; overflow: hidden; border-radius: 3px; background: #e0e0e0; }
+.summary-chart-track span { display: block; height: 100%; border-radius: 3px; background: #2e7d32; }
+.summary-chart-empty, .legend-empty { margin: 8px 0 0; color: #666; }
 
 .legend-panel {
   position: absolute; bottom: 20px; left: 20px; background-color: rgba(255, 255, 255, 0.95);
@@ -132,6 +140,22 @@ body, html {
 .legend-line.dashed { border-top-style: dashed; }
 .legend-line.dotted { border-top-style: dotted; }
 .track-filter { width: 100%; padding: 8px; margin-bottom: 12px; font-size: 1em; border: 1px solid #ccc; border-radius: 4px; background: #fff; }
+.track-legend-scroll { max-height: 24vh; overflow-y: auto; padding-right: 4px; }
+
+.species-legend-control {
+  background: rgba(255,255,255,0.96); border-radius: 6px; box-shadow: 0 2px 7px rgba(0,0,0,0.3);
+  color: #222; min-width: 160px; max-width: 220px;
+}
+.species-legend-details > summary {
+  padding: 9px 11px; cursor: pointer; font-size: 0.88rem; font-weight: bold; user-select: none;
+}
+.species-legend-list {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px;
+  max-height: 210px; overflow-y: auto; padding: 0 10px 10px;
+}
+.species-legend-item { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 0.75rem; }
+.species-legend-item img { width: 26px; height: 26px; flex: 0 0 26px; object-fit: contain; }
+.species-legend-item span { line-height: 1.25; overflow-wrap: anywhere; }
 
 .free-post-banner {
   position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
@@ -389,6 +413,9 @@ body, html {
   .panel-reopen-tab { top: 62px; padding: 10px 12px; }
   .sidebar { width: 85%; }
   .legend-panel { left: 10px; right: 10px; bottom: 10px; max-height: 30vh; }
+  .summary-panel { top: 58px; right: 8px; width: min(300px, calc(100vw - 16px)); max-height: calc(100dvh - 74px); }
+  .species-legend-control { max-width: 190px; }
+  .species-legend-list { grid-template-columns: 1fr; max-height: 180px; }
   .modal { align-items: flex-start; }
   .modal-content { width: 96%; padding: 16px; }
   .large-input { width: 100%; box-sizing: border-box; }

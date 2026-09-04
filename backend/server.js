@@ -563,6 +563,7 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
                 lat,
                 lng,
                 class_number,
+                group_id,
                 COALESCE(event_date, ?) AS event_date,
                 nickname,
                 creature,
@@ -614,7 +615,8 @@ app.post('/api/free-posts', requireAccess, postUpload, async (req, res) => {
     const lat = parseFloat(postData.lat);
     const lng = parseFloat(postData.lng);
     const classNumber = postData.classNumber ? parseInt(postData.classNumber, 10) : null;
-    const eventDate = getEventDate(postData.eventDate || postData.event_date);
+    const groupId = String(postData.groupId || postData.group_id || '').trim() || null;
+    let eventDate = getEventDate(postData.eventDate || postData.event_date);
     const imageFile = req.files?.image?.[0];
     const conceptFile = req.files?.conceptImage?.[0];
 
@@ -626,10 +628,18 @@ app.post('/api/free-posts', requireAccess, postUpload, async (req, res) => {
     const conceptImageUrl = conceptFile ? `uploads/${conceptFile.filename}` : null;
 
     try {
+        if (groupId) {
+            const group = await getGroupWithVirtualEvent(groupId);
+            if (!group || group.is_event) {
+                return res.status(400).json({ error: "投稿する班が正しくありません" });
+            }
+            eventDate = getEventDate(group.event_date);
+        }
+
         await db.run(
-            `INSERT INTO free_posts (lat, lng, class_number, event_date, nickname, creature, comment, image_url, concept_image_url)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [lat, lng, Number.isNaN(classNumber) ? null : classNumber, eventDate, postData.nickname, postData.creature, postData.comment, imageUrl, conceptImageUrl]
+            `INSERT INTO free_posts (lat, lng, class_number, group_id, event_date, nickname, creature, comment, image_url, concept_image_url)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [lat, lng, Number.isNaN(classNumber) ? null : classNumber, groupId, eventDate, postData.nickname, postData.creature, postData.comment, imageUrl, conceptImageUrl]
         );
         res.json({ status: "success", message: "自由投稿を保存しました！" });
     } catch (err) {
@@ -705,23 +715,25 @@ async function getAdminPosts() {
     const freePosts = await db.all(`
         SELECT
             'free' AS type,
-            id,
+            fp.id,
             NULL AS detection_id,
-            nickname,
-            creature,
-            comment,
-            image_url,
-            concept_image_url,
-            COALESCE(hidden, 0) AS hidden,
+            fp.nickname,
+            fp.creature,
+            fp.comment,
+            fp.image_url,
+            fp.concept_image_url,
+            COALESCE(fp.hidden, 0) AS hidden,
             NULL AS detection_class,
-            lat,
-            lng,
+            fp.lat,
+            fp.lng,
             NULL AS thumbnail_path,
-            class_number,
-            COALESCE(event_date, ?) AS event_date,
-            NULL AS group_name
-        FROM free_posts
-        ORDER BY id DESC
+            fp.class_number,
+            fp.group_id,
+            COALESCE(fp.event_date, ?) AS event_date,
+            g.name AS group_name
+        FROM free_posts fp
+        LEFT JOIN groups g ON g.id = fp.group_id
+        ORDER BY fp.id DESC
     `, EVENT_DATE_JUNE19);
 
     return [...detectionPosts, ...freePosts].sort((a, b) => b.id - a.id);
@@ -1074,6 +1086,7 @@ async function ensureSchema() {
             lat REAL,
             lng REAL,
             class_number INTEGER,
+            group_id TEXT,
             nickname TEXT,
             creature TEXT,
             comment TEXT,
@@ -1089,6 +1102,7 @@ async function ensureSchema() {
     await addColumnIfMissing('user_posts', 'concept_image_url', 'TEXT');
     await addColumnIfMissing('user_posts', 'hidden', 'INTEGER DEFAULT 0');
     await addColumnIfMissing('free_posts', 'class_number', 'INTEGER');
+    await addColumnIfMissing('free_posts', 'group_id', 'TEXT');
     await addColumnIfMissing('free_posts', 'concept_image_url', 'TEXT');
     await addColumnIfMissing('free_posts', 'event_date', `TEXT DEFAULT '${EVENT_DATE_JUNE19}'`);
     await addColumnIfMissing('free_posts', 'hidden', 'INTEGER DEFAULT 0');

@@ -7,6 +7,10 @@ const EVENT_DATE_JUNE19 = '2026-06-19';
 const EVENT_DATE_JULY11 = '2026-07-11';
 const JULY11_GROUP_ID = EVENT_DATE_JULY11;
 const JULY11_LABEL = '2026年7月11日';
+const EVENT_DATE_LABELS = {
+    [EVENT_DATE_JUNE19]: '2026年6月19日',
+    [EVENT_DATE_JULY11]: JULY11_LABEL
+};
 
 import './style.css';
 import L from 'leaflet';
@@ -42,6 +46,10 @@ function escapeHtml(value) {
         '"': '&quot;',
         "'": '&#039;'
     }[char]));
+}
+
+function formatEventDate(eventDate) {
+    return EVENT_DATE_LABELS[eventDate] || String(eventDate || '');
 }
 
 function setupAccessCodeFromUrl() {
@@ -240,6 +248,8 @@ let currentHeatLayer = null;
 let currentGroupId = null;
 let freePostMode = false;
 let allTracksClassFilter = 'all';
+let allRecordsEventFilter = 'all';
+let heatmapDateFilter = 'all';
 let selectedReviewGroupId = null;
 let lastPanelGroupId = null;
 let lastPanelOptions = {};
@@ -313,6 +323,30 @@ const detectionLabelOptions = [
 const speciesLabelAliases = {
     ebi: 'エビ'
 };
+
+const speciesLegendControl = L.control({ position: 'bottomright' });
+speciesLegendControl.onAdd = () => {
+    const container = L.DomUtil.create('div', 'species-legend-control leaflet-control');
+    const details = document.createElement('details');
+    details.className = 'species-legend-details';
+    details.open = window.innerWidth >= 1000;
+    details.innerHTML = `
+        <summary>生き物アイコン</summary>
+        <div class="species-legend-list">
+            ${detectionLabelOptions.map(name => `
+                <div class="species-legend-item">
+                    <img src="${getSpeciesIconUrl(name)}" alt="">
+                    <span>${escapeHtml(name)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    container.appendChild(details);
+    L.DomEvent.disableClickPropagation(container);
+    L.DomEvent.disableScrollPropagation(container);
+    return container;
+};
+speciesLegendControl.addTo(map);
 
 const legendPanel = document.createElement('div');
 legendPanel.id = 'legend-panel';
@@ -470,6 +504,10 @@ function freePostMatchesEvent(post, eventDate) {
 }
 
 function getCurrentPostEventDate() {
+    if ((currentGroupId === 'all-tracks' || currentGroupId === 'all-records' || isEventOverview(currentGroupId))
+        && selectedReviewGroupId && surveyData[selectedReviewGroupId]) {
+        return surveyData[selectedReviewGroupId].event_date || EVENT_DATE_JUNE19;
+    }
     return isEventGroup(currentGroupId) ? EVENT_DATE_JULY11 : EVENT_DATE_JUNE19;
 }
 
@@ -482,8 +520,21 @@ function getCurrentFreePostClassNumber() {
         return Number(allTracksClassFilter);
     }
 
-    if (currentGroupId === 'all-tracks' && selectedReviewGroupId && surveyData[selectedReviewGroupId]) {
+    if ((currentGroupId === 'all-tracks' || currentGroupId === 'all-records' || isEventOverview(currentGroupId))
+        && selectedReviewGroupId && surveyData[selectedReviewGroupId]) {
         return parseGroupInfo(surveyData[selectedReviewGroupId].name).classNumber;
+    }
+
+    return null;
+}
+
+function getCurrentFreePostGroupId() {
+    if (currentGroupId && surveyData[currentGroupId] && !isEventOverview(currentGroupId)) {
+        return currentGroupId;
+    }
+
+    if (selectedReviewGroupId && surveyData[selectedReviewGroupId] && !isEventOverview(selectedReviewGroupId)) {
+        return selectedReviewGroupId;
     }
 
     return null;
@@ -634,12 +685,7 @@ function getDetectionDisplayName(det) {
 function getGroupFreePosts(groupId) {
     const group = surveyData[groupId];
     if (!group) return [];
-    if (isEventGroup(groupId)) {
-        return freePosts.filter(post => freePostMatchesEvent(post, EVENT_DATE_JULY11));
-    }
-
-    const { classNumber } = parseGroupInfo(group.name);
-    return freePosts.filter(post => Number(post.class_number) === Number(classNumber));
+    return freePosts.filter(post => String(post.group_id || '') === String(groupId));
 }
 
 function getGroupPosts(groupId) {
@@ -708,13 +754,15 @@ function getSortedGroupEntries(classFilter = 'all', eventDate = EVENT_DATE_JUNE1
     return Object.entries(surveyData)
         .filter(([groupId, group]) => (
             !isEventOverview(groupId)
-            && (group.event_date || EVENT_DATE_JUNE19) === eventDate
-            && (eventDate === EVENT_DATE_JULY11 || groupMatchesClass(group.name, classFilter))
+            && (eventDate === 'all' || (group.event_date || EVENT_DATE_JUNE19) === eventDate)
+            && (eventDate !== EVENT_DATE_JUNE19 || groupMatchesClass(group.name, classFilter))
         ))
         .sort(([, a], [, b]) => {
+            const dateDifference = String(a.event_date || EVENT_DATE_JUNE19)
+                .localeCompare(String(b.event_date || EVENT_DATE_JUNE19));
             const infoA = parseGroupInfo(a.name);
             const infoB = parseGroupInfo(b.name);
-            return infoA.classNumber - infoB.classNumber || infoA.teamNumber - infoB.teamNumber;
+            return dateDifference || infoA.classNumber - infoB.classNumber || infoA.teamNumber - infoB.teamNumber;
         });
 }
 
@@ -738,7 +786,7 @@ function renderGroupSelector(selectedGroupId, classFilter, eventDate = EVENT_DAT
             <select id="review-group-select" class="track-filter">
                 ${groups.map(([groupId, group]) => `
                     <option value="${escapeHtml(groupId)}" ${groupId === selectedGroupId ? 'selected' : ''}>
-                        ${escapeHtml(getGroupDisplayName(groupId))}
+                        ${escapeHtml(eventDate === 'all' ? `${formatEventDate(group.event_date)} ${getGroupDisplayName(groupId)}` : getGroupDisplayName(groupId))}
                     </option>
                 `).join('')}
             </select>
@@ -879,13 +927,11 @@ function clearMap() {
     legendPanel.classList.add('hidden');
 }
 
-function renderFreePostMarkers(classFilter = 'all', eventDate = EVENT_DATE_JUNE19) {
+function renderFreePostMarkers({ classFilter = 'all', eventDate = EVENT_DATE_JUNE19, targetGroupId = null } = {}) {
     freePosts.forEach(post => {
-        if (eventDate === EVENT_DATE_JULY11) {
-            if (!freePostMatchesEvent(post, EVENT_DATE_JULY11)) return;
-        } else if (!freePostMatchesClass(post, classFilter)) {
-            return;
-        }
+        if (targetGroupId && String(post.group_id || '') !== String(targetGroupId)) return;
+        if (!targetGroupId && eventDate !== 'all' && !freePostMatchesEvent(post, eventDate)) return;
+        if (!targetGroupId && eventDate === EVENT_DATE_JUNE19 && !freePostMatchesClass(post, classFilter)) return;
 
         const marker = L.marker(toDisplayLatLng(post.lat, post.lng), { icon: createSpeciesMarkerIcon(post.creature) }).addTo(map);
         marker.bindPopup(renderPostSketchPopup([post]), {
@@ -897,11 +943,11 @@ function renderFreePostMarkers(classFilter = 'all', eventDate = EVENT_DATE_JUNE1
     });
 }
 
-function renderPostedDetectionMarkers(classFilter = 'all', targetGroupId = null, eventDate = EVENT_DATE_JUNE19) {
+function renderPostedDetectionMarkers({ classFilter = 'all', targetGroupId = null, eventDate = EVENT_DATE_JUNE19 } = {}) {
     Object.entries(surveyData).forEach(([groupId, group]) => {
         if (targetGroupId && groupId !== targetGroupId) return;
         if (isEventOverview(groupId)) return;
-        if (!targetGroupId && (group.event_date || EVENT_DATE_JUNE19) !== eventDate) return;
+        if (!targetGroupId && eventDate !== 'all' && (group.event_date || EVENT_DATE_JUNE19) !== eventDate) return;
         if (eventDate === EVENT_DATE_JUNE19 && !groupMatchesClass(group.name, classFilter)) return;
         if (!group.detections) return;
 
@@ -950,8 +996,8 @@ function renderGroupData(groupId) {
     });
 
     const { classNumber } = parseGroupInfo(data.name);
-    renderFreePostMarkers(String(classNumber), eventDate);
-    renderPostedDetectionMarkers(String(classNumber), groupId, eventDate);
+    renderFreePostMarkers({ targetGroupId: groupId, eventDate });
+    renderPostedDetectionMarkers({ targetGroupId: groupId, eventDate });
     openGroupReviewPanel(groupId);
     if (eventDate === EVENT_DATE_JULY11 && trackSegments.length > 0) {
         fitMapToTracks(trackSegments);
@@ -1001,8 +1047,8 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
         `);
     });
 
-    renderPostedDetectionMarkers(classFilter);
-    renderFreePostMarkers(classFilter);
+    renderPostedDetectionMarkers({ classFilter, eventDate: EVENT_DATE_JUNE19 });
+    renderFreePostMarkers({ classFilter, eventDate: EVENT_DATE_JUNE19 });
     legendPanel.innerHTML = `
         <h3>色と線の見方</h3>
         <select id="track-class-filter" class="track-filter" aria-label="表示するクラス">
@@ -1025,71 +1071,191 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
     updateSidebarMenu();
 }
 
-function drawHeatLayer(targetCreature) {
-    if (currentHeatLayer) map.removeLayer(currentHeatLayer);
-    let heatPoints = [];
+function renderAllRecords(eventDate = allRecordsEventFilter) {
+    setFreePostMode(false);
+    allRecordsEventFilter = eventDate;
+    setMapIllustration(eventDate === EVENT_DATE_JUNE19 ? EVENT_DATE_JUNE19 : EVENT_DATE_JULY11);
+    currentGroupId = 'all-records';
+    clearMap();
+    document.querySelector('.title').innerText = eventDate === 'all'
+        ? `${APP_TITLE} - すべての記録`
+        : `${APP_TITLE} - ${formatEventDate(eventDate)}の記録`;
+
+    const groupEntries = getSortedGroupEntries('all', eventDate);
+    const renderedSegments = [];
+    const legendItems = [];
+
+    groupEntries.forEach(([groupId, group]) => {
+        const groupEventDate = group.event_date || EVENT_DATE_JUNE19;
+        const style = { ...getGroupStyle(group.name) };
+        if (eventDate === 'all') {
+            style.dashArray = groupEventDate === EVENT_DATE_JUNE19 ? '10 7' : null;
+        }
+
+        getTrackSegments(group).forEach(segment => {
+            const line = L.polyline(toDisplayTrack(segment), style).addTo(map);
+            line.on('click', () => {
+                openGroupReviewPanel(groupId, {
+                    showSelector: true,
+                    eventDate: allRecordsEventFilter,
+                    viewMode: 'all-records'
+                });
+            });
+            currentTrackLayers.push(line);
+            renderedSegments.push(segment);
+        });
+
+        legendItems.push(`
+            <div class="legend-item">
+                <span class="legend-line ${style.dashArray ? 'dashed' : ''}" style="border-top-color:${style.color};"></span>
+                <span>${escapeHtml(eventDate === 'all' ? `${formatEventDate(groupEventDate)} ${getGroupDisplayName(groupId)}` : getGroupDisplayName(groupId))}</span>
+            </div>
+        `);
+    });
+
+    renderPostedDetectionMarkers({ eventDate });
+    renderFreePostMarkers({ eventDate });
+    legendPanel.innerHTML = `
+        <h3>表示する記録</h3>
+        <select id="all-records-date-filter" class="track-filter" aria-label="表示する日">
+            <option value="all" ${eventDate === 'all' ? 'selected' : ''}>すべての日</option>
+            <option value="${EVENT_DATE_JUNE19}" ${eventDate === EVENT_DATE_JUNE19 ? 'selected' : ''}>${formatEventDate(EVENT_DATE_JUNE19)}</option>
+            <option value="${EVENT_DATE_JULY11}" ${eventDate === EVENT_DATE_JULY11 ? 'selected' : ''}>${formatEventDate(EVENT_DATE_JULY11)}</option>
+        </select>
+        ${eventDate === 'all' ? `
+            <div class="legend-item"><span class="legend-line dashed"></span><span>${formatEventDate(EVENT_DATE_JUNE19)}</span></div>
+            <div class="legend-item"><span class="legend-line"></span><span>${formatEventDate(EVENT_DATE_JULY11)}</span></div>
+        ` : ''}
+        <div class="track-legend-scroll">
+            ${legendItems.length > 0 ? legendItems.join('') : '<p class="legend-empty">表示できる道がありません。</p>'}
+        </div>
+    `;
+    legendPanel.classList.remove('hidden');
+    document.getElementById('all-records-date-filter').addEventListener('change', event => {
+        selectedReviewGroupId = null;
+        renderAllRecords(event.target.value);
+    });
+
+    const selectedGroupIsVisible = selectedReviewGroupId
+        && surveyData[selectedReviewGroupId]
+        && (eventDate === 'all' || surveyData[selectedReviewGroupId].event_date === eventDate);
+    const reviewGroupId = selectedGroupIsVisible
+        ? selectedReviewGroupId
+        : getDefaultReviewGroupId('all', eventDate);
+    if (reviewGroupId) {
+        openGroupReviewPanel(reviewGroupId, {
+            showSelector: true,
+            eventDate,
+            viewMode: 'all-records'
+        });
+    }
+
+    renderedSegments.length > 0 ? fitMapToTracks(renderedSegments) : fitMapToIllustration();
+    updateSidebarMenu();
+}
+
+function collectObservations(eventDate = 'all') {
+    const observations = [];
+
     Object.entries(surveyData).forEach(([groupId, group]) => {
-        if (isEventGroup(groupId)) return;
-        if (!group.detections) return;
-        group.detections.forEach(det => {
-            const creatureNames = getVerifiedLabels(det);
-            const namesForHeat = creatureNames.length > 0 ? creatureNames : [normalizeSpeciesLabel(det.class_name)];
-            if (targetCreature === 'all' || namesForHeat.includes(targetCreature)) {
-                heatPoints.push([...toDisplayLatLng(det.lat, det.lng), 1]);
-            }
+        if (isEventOverview(groupId)) return;
+        const groupEventDate = group.event_date || EVENT_DATE_JUNE19;
+        if (eventDate !== 'all' && groupEventDate !== eventDate) return;
+
+        (group.detections || []).forEach(det => {
+            const verifiedNames = getVerifiedLabels(det);
+            const names = verifiedNames.length > 0 ? verifiedNames : [normalizeSpeciesLabel(det.class_name)];
+            observations.push({ lat: det.lat, lng: det.lng, names });
         });
     });
+
     freePosts.forEach(post => {
-        if (getPostEventDate(post) !== EVENT_DATE_JUNE19) return;
-        if (targetCreature === 'all' || post.creature === targetCreature) {
-            heatPoints.push([...toDisplayLatLng(post.lat, post.lng), 1]);
-        }
+        if (eventDate !== 'all' && getPostEventDate(post) !== eventDate) return;
+        observations.push({ lat: post.lat, lng: post.lng, names: [normalizeSpeciesLabel(post.creature)] });
     });
+
+    return observations;
+}
+
+function getCreatureCounts(observations) {
+    const counts = {};
+    observations.forEach(observation => {
+        observation.names.filter(Boolean).forEach(name => {
+            counts[name] = (counts[name] || 0) + 1;
+        });
+    });
+    return counts;
+}
+
+function drawHeatLayer(targetCreature, eventDate = heatmapDateFilter) {
+    if (currentHeatLayer) map.removeLayer(currentHeatLayer);
+    const heatPoints = collectObservations(eventDate)
+        .filter(observation => targetCreature === 'all' || observation.names.includes(targetCreature))
+        .map(observation => [...toDisplayLatLng(observation.lat, observation.lng), 1]);
     currentHeatLayer = L.heatLayer(heatPoints, { radius: 25, blur: 15, maxZoom: 18 }).addTo(map);
 }
 
-function renderHeatmap() {
+function renderCreatureChart(creatureCounts) {
+    const chart = document.getElementById('summary-chart');
+    const entries = Object.entries(creatureCounts).sort(([, countA], [, countB]) => countB - countA);
+    const total = entries.reduce((sum, [, count]) => sum + count, 0);
+    const maxCount = Math.max(...entries.map(([, count]) => count), 1);
+
+    chart.innerHTML = entries.length > 0 ? entries.map(([name, count]) => {
+        const share = total > 0 ? Math.round((count / total) * 100) : 0;
+        const width = Math.max((count / maxCount) * 100, 4);
+        return `
+            <div class="summary-chart-row" data-creature="${escapeHtml(name)}">
+                <div class="summary-chart-label">
+                    <span>${escapeHtml(name)}</span>
+                    <strong>${count}件（${share}%）</strong>
+                </div>
+                <div class="summary-chart-track" aria-hidden="true">
+                    <span style="width:${width}%"></span>
+                </div>
+            </div>
+        `;
+    }).join('') : '<p class="summary-chart-empty">表示できる記録がありません。</p>';
+}
+
+function updateCreatureChartSelection(targetCreature) {
+    document.querySelectorAll('.summary-chart-row').forEach(row => {
+        row.classList.toggle('is-selected', targetCreature !== 'all' && row.dataset.creature === targetCreature);
+    });
+}
+
+function renderHeatmap(eventDate = heatmapDateFilter) {
     setFreePostMode(false);
-    setMapIllustration(EVENT_DATE_JUNE19);
+    heatmapDateFilter = eventDate;
+    setMapIllustration(eventDate === EVENT_DATE_JUNE19 ? EVENT_DATE_JUNE19 : EVENT_DATE_JULY11);
     clearMap();
+    const speciesLegendDetails = document.querySelector('.species-legend-details');
+    if (speciesLegendDetails) speciesLegendDetails.open = false;
     currentGroupId = "heatmap";
     document.querySelector('.title').innerText = `${APP_TITLE} - 多く見つかった場所`;
 
-    let creatureCounts = {};
-    Object.entries(surveyData).forEach(([groupId, group]) => {
-        if (isEventGroup(groupId)) return;
-        if (!group.detections) return;
-        group.detections.forEach(det => {
-            const creatureNames = getVerifiedLabels(det);
-            const namesForCount = creatureNames.length > 0 ? creatureNames : [normalizeSpeciesLabel(det.class_name)];
-            namesForCount.forEach(creatureName => {
-                creatureCounts[creatureName] = (creatureCounts[creatureName] || 0) + 1;
-            });
-        });
-    });
-    freePosts.forEach(post => {
-        if (getPostEventDate(post) !== EVENT_DATE_JUNE19) return;
-        creatureCounts[post.creature] = (creatureCounts[post.creature] || 0) + 1;
-    });
-
-    const ul = document.getElementById('summary-list');
-    ul.innerHTML = '';
+    const observations = collectObservations(eventDate);
+    const creatureCounts = getCreatureCounts(observations);
     const filterSelect = document.getElementById('heatmap-filter');
+    const dateSelect = document.getElementById('heatmap-date-filter');
+    dateSelect.value = eventDate;
     filterSelect.innerHTML = '<option value="all">すべてのいきもの</option>';
 
-    for (const [name, count] of Object.entries(creatureCounts)) {
-        const li = document.createElement('li');
-        li.innerText = `${name} : ${count}匹`;
-        ul.appendChild(li);
-
+    Object.keys(creatureCounts).sort((a, b) => creatureCounts[b] - creatureCounts[a]).forEach(name => {
         const option = document.createElement('option');
         option.value = name;
         option.innerText = name;
         filterSelect.appendChild(option);
-    }
+    });
 
+    renderCreatureChart(creatureCounts);
     document.getElementById('summary-panel').classList.remove('hidden');
-    drawHeatLayer('all');
+    drawHeatLayer('all', eventDate);
+    if (observations.length > 0) {
+        fitMapToTracks([observations.map(item => [item.lat, item.lng])]);
+    } else {
+        fitMapToIllustration();
+    }
     updateSidebarMenu();
 }
 
@@ -1112,7 +1278,8 @@ function renderJuly11Layer() {
             line.on('click', () => {
                 openGroupReviewPanel(groupId, {
                     showSelector: true,
-                    eventDate: EVENT_DATE_JULY11
+                    eventDate: EVENT_DATE_JULY11,
+                    viewMode: 'all-records'
                 });
             });
             currentTrackLayers.push(line);
@@ -1126,8 +1293,8 @@ function renderJuly11Layer() {
         `);
     });
 
-    renderFreePostMarkers('all', EVENT_DATE_JULY11);
-    renderPostedDetectionMarkers('all', null, EVENT_DATE_JULY11);
+    renderFreePostMarkers({ eventDate: EVENT_DATE_JULY11 });
+    renderPostedDetectionMarkers({ eventDate: EVENT_DATE_JULY11 });
     if (legendItems.length > 0) {
         legendPanel.innerHTML = `<h3>色と線の見方</h3>${legendItems.join('')}`;
         legendPanel.classList.remove('hidden');
@@ -1141,7 +1308,8 @@ function renderJuly11Layer() {
     if (reviewGroupId) {
         openGroupReviewPanel(reviewGroupId, {
             showSelector: true,
-            eventDate: EVENT_DATE_JULY11
+            eventDate: EVENT_DATE_JULY11,
+            viewMode: 'all-records'
         });
     } else {
         openGroupReviewPanel(JULY11_GROUP_ID);
@@ -1151,7 +1319,12 @@ function renderJuly11Layer() {
 }
 
 document.getElementById('heatmap-filter').addEventListener('change', (event) => {
-    drawHeatLayer(event.target.value);
+    drawHeatLayer(event.target.value, heatmapDateFilter);
+    updateCreatureChartSelection(event.target.value);
+});
+
+document.getElementById('heatmap-date-filter').addEventListener('change', (event) => {
+    renderHeatmap(event.target.value);
 });
 
 const coachmarkSteps = [
@@ -1163,12 +1336,18 @@ const coachmarkSteps = [
     },
     {
         selector: '#btn-all-tracks',
-        title: 'すべての班の記録',
-        body: 'すべての班が歩いた道や投稿を、まとめて見ることができます。Davis、Hardy、Learnedだけをえらぶこともできます。',
+        title: 'その日のすべての班',
+        body: '2026年6月19日に活動した班の道や投稿を、まとめて見ることができます。',
         before: () => {
             document.getElementById('sidebar').classList.remove('hidden');
             document.getElementById('menu-date-2026-06-19')?.setAttribute('open', '');
         }
+    },
+    {
+        selector: '#btn-all-records',
+        title: 'すべての記録',
+        body: '日にちをこえて、みんなが歩いた道や投稿をまとめて見ることができます。',
+        before: () => document.getElementById('sidebar').classList.remove('hidden')
     },
     {
         selector: '#btn-free-post',
@@ -1188,7 +1367,7 @@ const coachmarkSteps = [
     {
         selector: '#btn-heatmap',
         title: '多く見つかった場所',
-        body: 'いきものが多く見つかった場所を、色で見ることができます。',
+        body: 'いきものが多く見つかった場所を、地図の色とグラフで見ることができます。',
         before: () => {
             document.getElementById('sidebar').classList.remove('hidden');
             document.getElementById('menu-date-2026-06-19')?.setAttribute('open', '');
@@ -1283,11 +1462,24 @@ function updateSidebarMenu() {
     const june19Details = document.createElement('details');
     june19Details.id = 'menu-date-2026-06-19';
     june19Details.className = 'menu-details date-menu-details';
-    june19Details.open = Boolean(currentGroupId && surveyData[currentGroupId] && !isEventGroup(currentGroupId));
+    june19Details.open = currentGroupId === 'all-tracks'
+        || Boolean(currentGroupId && surveyData[currentGroupId] && !isEventGroup(currentGroupId));
 
     const june19Summary = document.createElement('summary');
     june19Summary.innerText = '2026年6月19日';
     june19Details.appendChild(june19Summary);
+
+    const btnJune19All = document.createElement('button');
+    btnJune19All.id = 'btn-all-tracks';
+    btnJune19All.className = 'nav-btn date-nav-btn';
+    btnJune19All.innerText = 'すべての班の記録を見る';
+    btnJune19All.classList.toggle('active', currentGroupId === 'all-tracks');
+    btnJune19All.addEventListener('click', () => {
+        selectedReviewGroupId = null;
+        renderAllTracks();
+        document.getElementById('sidebar').classList.add('hidden');
+    });
+    june19Details.appendChild(btnJune19All);
 
     const groupsDetails = document.createElement('details');
     groupsDetails.className = 'menu-details group-menu-details';
@@ -1388,12 +1580,13 @@ function updateSidebarMenu() {
 
     const liAllTracks = document.createElement('li');
     const btnAllTracks = document.createElement('button');
-    btnAllTracks.id = 'btn-all-tracks';
+    btnAllTracks.id = 'btn-all-records';
     btnAllTracks.className = 'nav-btn';
-    btnAllTracks.innerText = 'すべての班の記録を見る';
+    btnAllTracks.innerText = 'すべての記録を見る';
+    btnAllTracks.classList.toggle('active', currentGroupId === 'all-records');
     btnAllTracks.addEventListener('click', () => {
         selectedReviewGroupId = null;
-        renderAllTracks();
+        renderAllRecords('all');
         document.getElementById('sidebar').classList.add('hidden');
     });
     liAllTracks.appendChild(btnAllTracks);
@@ -1405,8 +1598,12 @@ function updateSidebarMenu() {
     btnFreePost.className = 'nav-btn';
     btnFreePost.innerText = '投稿する場所を選ぶ';
     btnFreePost.addEventListener('click', () => {
-        setMapIllustration(EVENT_DATE_JUNE19);
-        if (isEventGroup(currentGroupId)) {
+        const targetGroupId = getCurrentFreePostGroupId();
+        if (targetGroupId) {
+            renderGroupData(targetGroupId);
+            document.getElementById('detail-panel').classList.add('hidden');
+        } else {
+            setMapIllustration(EVENT_DATE_JUNE19);
             currentGroupId = null;
             clearMap();
             fitMapToIllustration();
@@ -1463,6 +1660,8 @@ function rerenderCurrentView() {
         renderHeatmap();
     } else if (currentGroupId === "all-tracks") {
         renderAllTracks();
+    } else if (currentGroupId === "all-records") {
+        renderAllRecords();
     } else if (currentGroupId) {
         renderGroupData(currentGroupId);
     }
@@ -1508,6 +1707,7 @@ map.on('click', (event) => {
         lat: sourceLatLng.lat,
         lng: sourceLatLng.lng,
         classNumber: getCurrentFreePostClassNumber(),
+        groupId: getCurrentFreePostGroupId(),
         eventDate: getCurrentPostEventDate()
     });
 });
@@ -1546,11 +1746,19 @@ document.addEventListener('change', async (event) => {
     const reviewGroupSelect = event.target.closest('#review-group-select');
     if (reviewGroupSelect) {
         const selectedEventDate = surveyData[reviewGroupSelect.value]?.event_date || EVENT_DATE_JUNE19;
+        const overviewMode = currentGroupId === 'all-tracks'
+            || currentGroupId === 'all-records'
+            || isEventOverview(currentGroupId);
+        const selectorEventDate = currentGroupId === 'all-records'
+            ? 'all'
+            : isEventOverview(currentGroupId)
+                ? EVENT_DATE_JULY11
+                : selectedEventDate;
         openGroupReviewPanel(reviewGroupSelect.value, {
             showSelector: true,
             classFilter: allTracksClassFilter,
-            eventDate: selectedEventDate,
-            viewMode: currentGroupId === 'all-tracks' ? 'all-records' : undefined
+            eventDate: selectorEventDate,
+            viewMode: overviewMode ? 'all-records' : undefined
         });
     }
 });
@@ -1573,11 +1781,14 @@ document.addEventListener('click', async (event) => {
         try {
             await updateDetectionLabel(saveButton.dataset.detectionId, creatures);
             const selectedEventDate = surveyData[selectedReviewGroupId]?.event_date || EVENT_DATE_JUNE19;
+            const overviewMode = currentGroupId === 'all-tracks'
+                || currentGroupId === 'all-records'
+                || isEventOverview(currentGroupId);
             openGroupReviewPanel(selectedReviewGroupId, {
-                showSelector: currentGroupId === 'all-tracks' || selectedEventDate === EVENT_DATE_JULY11,
+                showSelector: overviewMode,
                 classFilter: allTracksClassFilter,
-                eventDate: selectedEventDate,
-                viewMode: currentGroupId === 'all-tracks' ? 'all-records' : undefined
+                eventDate: currentGroupId === 'all-records' ? 'all' : selectedEventDate,
+                viewMode: overviewMode ? 'all-records' : undefined
             });
         } catch (error) {
             alert(error.message);
