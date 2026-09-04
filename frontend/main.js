@@ -82,6 +82,20 @@ const BASE_MAP_SOURCE_BOUNDS = [
     [35.0668688174732, 135.78416397658356 + MAP_IMAGE_LNG_OFFSET],
     [35.06464445892178, 135.78518787088882 + MAP_IMAGE_LNG_OFFSET]
 ];
+// The extended image keeps the former 1825 x 862 map pixel-for-pixel at its top-left.
+// Expanding the source bounds by the same pixel ratios preserves every existing overlay position.
+const JULY11_EXTENDED_MAP_SOURCE_BOUNDS = [
+    [
+        BASE_MAP_SOURCE_BOUNDS[1][0]
+            + (BASE_MAP_SOURCE_BOUNDS[0][0] - BASE_MAP_SOURCE_BOUNDS[1][0]) * (2775 / 1825),
+        BASE_MAP_SOURCE_BOUNDS[0][1]
+    ],
+    [
+        BASE_MAP_SOURCE_BOUNDS[1][0],
+        BASE_MAP_SOURCE_BOUNDS[0][1]
+            + (BASE_MAP_SOURCE_BOUNDS[1][1] - BASE_MAP_SOURCE_BOUNDS[0][1]) * (1313 / 862)
+    ]
+];
 const mapIllustrations = {
     [EVENT_DATE_JUNE19]: {
         url: '/river_map6_landscape.jpg',
@@ -90,13 +104,13 @@ const mapIllustrations = {
         aspectRatio: 5484 / 2580
     },
     [EVENT_DATE_JULY11]: {
-        url: '/20260711_map.png',
-        sourceBounds: BASE_MAP_SOURCE_BOUNDS,
+        url: '/20260711_map_extended.png',
+        sourceBounds: JULY11_EXTENDED_MAP_SOURCE_BOUNDS,
         viewSourceBounds: [
             [35.06830, 135.78395],
             [35.06440, 135.78580]
         ],
-        aspectRatio: 1825 / 862
+        aspectRatio: 2775 / 1313
     }
 };
 
@@ -685,7 +699,17 @@ function getDetectionDisplayName(det) {
 function getGroupFreePosts(groupId) {
     const group = surveyData[groupId];
     if (!group) return [];
-    return freePosts.filter(post => String(post.group_id || '') === String(groupId));
+    return freePosts.filter(post => freePostMatchesGroupView(post, groupId));
+}
+
+function freePostMatchesGroupView(post, groupId) {
+    const group = surveyData[groupId];
+    if (!group) return false;
+    if (String(post.group_id || '') === String(groupId)) return true;
+
+    const isLegacyJune19Post = !post.group_id && freePostMatchesEvent(post, EVENT_DATE_JUNE19);
+    const isJune19Group = (group.event_date || EVENT_DATE_JUNE19) === EVENT_DATE_JUNE19;
+    return isLegacyJune19Post && isJune19Group;
 }
 
 function getGroupPosts(groupId) {
@@ -929,7 +953,7 @@ function clearMap() {
 
 function renderFreePostMarkers({ classFilter = 'all', eventDate = EVENT_DATE_JUNE19, targetGroupId = null } = {}) {
     freePosts.forEach(post => {
-        if (targetGroupId && String(post.group_id || '') !== String(targetGroupId)) return;
+        if (targetGroupId && !freePostMatchesGroupView(post, targetGroupId)) return;
         if (!targetGroupId && eventDate !== 'all' && !freePostMatchesEvent(post, eventDate)) return;
         if (!targetGroupId && eventDate === EVENT_DATE_JUNE19 && !freePostMatchesClass(post, classFilter)) return;
 
