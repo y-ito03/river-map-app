@@ -332,6 +332,30 @@ button:disabled {
   color: #5d6a61;
 }
 
+.post-group-editor {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #dde6df;
+}
+
+.post-group-editor > label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.post-group-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.post-group-select {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
 .actions {
   margin-top: 14px;
   justify-content: flex-end;

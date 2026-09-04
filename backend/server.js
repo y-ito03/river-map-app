@@ -742,7 +742,13 @@ async function getAdminPosts() {
 app.get('/api/admin/posts', requireAdmin, async (req, res) => {
     try {
         const posts = await getAdminPosts();
-        res.json({ posts });
+        const groups = await db.all(
+            `SELECT id, name, COALESCE(event_date, ?) AS event_date
+             FROM groups
+             ORDER BY event_date, name`,
+            [EVENT_DATE_JUNE19]
+        );
+        res.json({ posts, groups });
     } catch (err) {
         console.error("管理用投稿一覧の取得エラー:", err);
         res.status(500).json({ error: "投稿一覧の取得に失敗しました" });
@@ -767,6 +773,45 @@ app.patch('/api/admin/posts/:type/:id', requireAdmin, async (req, res) => {
     } catch (err) {
         console.error("投稿の表示状態更新エラー:", err);
         res.status(500).json({ error: "投稿の更新に失敗しました" });
+    }
+});
+
+app.patch('/api/admin/posts/free/:id/group', requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const groupId = String(req.body.group_id || '').trim();
+
+    if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ error: "投稿IDが正しくありません" });
+    }
+
+    try {
+        if (!groupId) {
+            const result = await db.run("UPDATE free_posts SET group_id = NULL WHERE id = ?", [id]);
+            if (result.changes === 0) {
+                return res.status(404).json({ error: "投稿が見つかりません" });
+            }
+            return res.json({ status: "success", group_id: null });
+        }
+
+        const group = await getGroupWithVirtualEvent(groupId);
+        if (!group || group.is_event) {
+            return res.status(400).json({ error: "投稿した班が正しくありません" });
+        }
+
+        const { classNumber } = parseGroupInfo(group.name);
+        const eventDate = getEventDate(group.event_date);
+        const result = await db.run(
+            "UPDATE free_posts SET group_id = ?, class_number = ?, event_date = ? WHERE id = ?",
+            [groupId, classNumber, eventDate, id]
+        );
+        if (result.changes === 0) {
+            return res.status(404).json({ error: "投稿が見つかりません" });
+        }
+
+        return res.json({ status: "success", group_id: groupId });
+    } catch (err) {
+        console.error("自由投稿の班更新エラー:", err);
+        return res.status(500).json({ error: "投稿した班を保存できませんでした" });
     }
 });
 

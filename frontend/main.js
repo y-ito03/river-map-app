@@ -699,17 +699,30 @@ function getDetectionDisplayName(det) {
 function getGroupFreePosts(groupId) {
     const group = surveyData[groupId];
     if (!group) return [];
-    return freePosts.filter(post => freePostMatchesGroupView(post, groupId));
+    return freePosts.filter(post => freePostMatchesGroupPanel(post, groupId));
 }
 
-function freePostMatchesGroupView(post, groupId) {
+function freePostMatchesGroupPanel(post, groupId) {
     const group = surveyData[groupId];
     if (!group) return false;
     if (String(post.group_id || '') === String(groupId)) return true;
+    if (post.group_id) return false;
 
-    const isLegacyJune19Post = !post.group_id && freePostMatchesEvent(post, EVENT_DATE_JUNE19);
-    const isJune19Group = (group.event_date || EVENT_DATE_JUNE19) === EVENT_DATE_JUNE19;
-    return isLegacyJune19Post && isJune19Group;
+    const groupEventDate = group.event_date || EVENT_DATE_JUNE19;
+    if (!freePostMatchesEvent(post, groupEventDate)) return false;
+    if (groupEventDate === EVENT_DATE_JULY11) return true;
+
+    const { classNumber } = parseGroupInfo(group.name);
+    return Number(post.class_number) === Number(classNumber);
+}
+
+function freePostMatchesGroupMap(post, groupId) {
+    const group = surveyData[groupId];
+    if (!group) return false;
+    if (String(post.group_id || '') === String(groupId)) return true;
+    if (post.group_id) return false;
+
+    return freePostMatchesEvent(post, group.event_date || EVENT_DATE_JUNE19);
 }
 
 function getGroupPosts(groupId) {
@@ -953,7 +966,7 @@ function clearMap() {
 
 function renderFreePostMarkers({ classFilter = 'all', eventDate = EVENT_DATE_JUNE19, targetGroupId = null } = {}) {
     freePosts.forEach(post => {
-        if (targetGroupId && !freePostMatchesGroupView(post, targetGroupId)) return;
+        if (targetGroupId && !freePostMatchesGroupMap(post, targetGroupId)) return;
         if (!targetGroupId && eventDate !== 'all' && !freePostMatchesEvent(post, eventDate)) return;
         if (!targetGroupId && eventDate === EVENT_DATE_JUNE19 && !freePostMatchesClass(post, classFilter)) return;
 
@@ -1019,7 +1032,6 @@ function renderGroupData(groupId) {
         currentTrackLayers.push(line);
     });
 
-    const { classNumber } = parseGroupInfo(data.name);
     renderFreePostMarkers({ targetGroupId: groupId, eventDate });
     renderPostedDetectionMarkers({ targetGroupId: groupId, eventDate });
     openGroupReviewPanel(groupId);

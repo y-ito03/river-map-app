@@ -41,6 +41,9 @@ const detectionLabelAliases = {
   'コオニヤンマのヤゴ': 'コオニヤンマ',
   その他: 'その他の生き物',
 };
+const adminClassNames = { 1: 'Davis', 2: 'Hardy', 3: 'Learned' };
+const adminClassLetters = { d: 1, h: 2, l: 3 };
+const adminTeamNumbers = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7 };
 
 function getAdminCode() {
   return localStorage.getItem(ADMIN_STORAGE_KEY) || '';
@@ -165,8 +168,78 @@ function normalizeDetectionLabel(value) {
   return detectionLabelAliases[value] || value || '';
 }
 
+function parseAdminGroupInfo(groupName) {
+  const name = String(groupName || '');
+  const classTeamMatch = name.match(/([DHL])\s*組.*?([A-G])\s*班/i);
+  if (classTeamMatch) {
+    const teamLabel = classTeamMatch[2].toUpperCase();
+    return {
+      classNumber: adminClassLetters[classTeamMatch[1].toLowerCase()] || 1,
+      teamNumber: adminTeamNumbers[teamLabel.toLowerCase()] || 1,
+      teamLabel,
+    };
+  }
+
+  const reversedMatch = name.match(/([DHL])\s*班.*?([A-G])\s*組/i);
+  if (reversedMatch) {
+    const teamLabel = reversedMatch[2].toUpperCase();
+    return {
+      classNumber: adminClassLetters[reversedMatch[1].toLowerCase()] || 1,
+      teamNumber: adminTeamNumbers[teamLabel.toLowerCase()] || 1,
+      teamLabel,
+    };
+  }
+
+  const teamMatch = name.match(/(\d+)\s*班/);
+  return {
+    classNumber: 1,
+    teamNumber: teamMatch ? Number(teamMatch[1]) : 1,
+    teamLabel: teamMatch ? teamMatch[1] : '1',
+  };
+}
+
+function getAdminGroupLabel(group) {
+  const { classNumber, teamLabel } = parseAdminGroupInfo(group?.name);
+  if (group?.event_date === '2026-07-11') return `2026年7月11日 ${teamLabel}班`;
+  return `${adminClassNames[classNumber] || `Class ${classNumber}`} ${teamLabel}班`;
+}
+
+function getCompatiblePostGroups(post) {
+  const postEventDate = post.event_date || '2026-06-19';
+  return groups.filter((group) => {
+    if (group.is_event || (group.event_date || '2026-06-19') !== postEventDate) return false;
+    if (postEventDate === '2026-07-11' || !post.class_number) return true;
+    return parseAdminGroupInfo(group.name).classNumber === Number(post.class_number);
+  });
+}
+
+function renderPostGroupEditor(post) {
+  if (post.type !== 'free') return '';
+  const compatibleGroups = getCompatiblePostGroups(post);
+  return `
+    <div class="post-group-editor">
+      <label for="post-group-${post.id}">投稿した班</label>
+      <div class="post-group-editor-row">
+        <select id="post-group-${post.id}" class="post-group-select" data-post-id="${post.id}">
+          <option value="" ${post.group_id ? '' : 'selected'}>班未設定（旧投稿）</option>
+          ${compatibleGroups.map((group) => `
+            <option value="${escapeHtml(group.id)}" ${String(post.group_id || '') === String(group.id) ? 'selected' : ''}>
+              ${escapeHtml(getAdminGroupLabel(group))}
+            </option>
+          `).join('')}
+        </select>
+        <button class="secondary-btn" data-action="save-post-group" data-type="free" data-id="${post.id}">班を保存</button>
+      </div>
+    </div>
+  `;
+}
+
 function getLocationLabel(post) {
   if (post.type === 'free') {
+    const assignedGroup = groups.find((group) => String(group.id) === String(post.group_id || ''));
+    if (assignedGroup) {
+      return `${getAdminGroupLabel(assignedGroup)} / 緯度 ${Number(post.lat).toFixed(6)}, 経度 ${Number(post.lng).toFixed(6)}`;
+    }
     if (post.event_date === '2026-07-11') {
       return `2026年7月11日 / 緯度 ${Number(post.lat).toFixed(6)}, 経度 ${Number(post.lng).toFixed(6)}`;
     }
@@ -231,6 +304,8 @@ function renderPosts() {
         ${renderImage('考えた図', post.concept_image_url)}
       </div>
 
+      ${renderPostGroupEditor(post)}
+
       <div class="actions">
         <button class="secondary-btn" data-action="toggle" data-type="${post.type}" data-id="${post.id}" data-hidden="${post.hidden ? '0' : '1'}">
           ${post.hidden ? '表示にもどす' : '非表示にする'}
@@ -247,6 +322,7 @@ async function loadPosts() {
   summaryText.textContent = '読み込み中...';
   const data = await fetchJson('/api/admin/posts');
   posts = data.posts || [];
+  groups = data.groups || groups;
   renderPosts();
 }
 
@@ -522,6 +598,17 @@ async function togglePost(type, id, hidden) {
   await loadPosts();
 }
 
+async function savePostGroup(id) {
+  const select = postsList.querySelector(`.post-group-select[data-post-id="${id}"]`);
+  if (!select) return;
+
+  await fetchJson(`/api/admin/posts/free/${id}/group`, {
+    method: 'PATCH',
+    body: JSON.stringify({ group_id: select.value }),
+  });
+  await loadPosts();
+}
+
 async function deletePost(type, id) {
   if (!window.confirm('この投稿を削除します。元にもどせません。よろしいですか？')) return;
 
@@ -567,7 +654,9 @@ postsList.addEventListener('click', (event) => {
 
   const task = action === 'delete'
     ? deletePost(type, id)
-    : togglePost(type, id, hidden === '1');
+    : action === 'save-post-group'
+      ? savePostGroup(id)
+      : togglePost(type, id, hidden === '1');
 
   task.catch((error) => {
     window.alert(error.message);
