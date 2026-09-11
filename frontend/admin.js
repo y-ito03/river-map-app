@@ -43,7 +43,8 @@ const detectionLabelAliases = {
 };
 const adminClassNames = { 1: 'Davis', 2: 'Hardy', 3: 'Learned' };
 const adminClassLetters = { d: 1, h: 2, l: 3 };
-const adminTeamNumbers = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7 };
+const adminTeamNumbers = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7, h: 8, i: 9, j: 10 };
+const adminDefaultEventDate = '2026-06-19';
 
 function getAdminCode() {
   return localStorage.getItem(ADMIN_STORAGE_KEY) || '';
@@ -168,6 +169,11 @@ function normalizeDetectionLabel(value) {
   return detectionLabelAliases[value] || value || '';
 }
 
+function formatAdminEventDate(eventDate) {
+  const [year, month, day] = String(eventDate || adminDefaultEventDate).split('-').map(Number);
+  return `${year}年${month}月${day}日`;
+}
+
 function parseAdminGroupInfo(groupName) {
   const name = String(groupName || '');
   const classTeamMatch = name.match(/([DHL])\s*組.*?([A-G])\s*班/i);
@@ -190,6 +196,16 @@ function parseAdminGroupInfo(groupName) {
     };
   }
 
+  const eventTeamMatch = name.match(/([A-J])\s*班/i);
+  if (eventTeamMatch) {
+    const teamLabel = eventTeamMatch[1].toUpperCase();
+    return {
+      classNumber: 1,
+      teamNumber: adminTeamNumbers[teamLabel.toLowerCase()] || 1,
+      teamLabel,
+    };
+  }
+
   const teamMatch = name.match(/(\d+)\s*班/);
   return {
     classNumber: 1,
@@ -200,15 +216,17 @@ function parseAdminGroupInfo(groupName) {
 
 function getAdminGroupLabel(group) {
   const { classNumber, teamLabel } = parseAdminGroupInfo(group?.name);
-  if (group?.event_date === '2026-07-11') return `2026年7月11日 ${teamLabel}班`;
+  if ((group?.event_date || adminDefaultEventDate) !== adminDefaultEventDate) {
+    return `${formatAdminEventDate(group.event_date)} ${teamLabel}班`;
+  }
   return `${adminClassNames[classNumber] || `Class ${classNumber}`} ${teamLabel}班`;
 }
 
 function getCompatiblePostGroups(post) {
-  const postEventDate = post.event_date || '2026-06-19';
+  const postEventDate = post.event_date || adminDefaultEventDate;
   return groups.filter((group) => {
-    if (group.is_event || (group.event_date || '2026-06-19') !== postEventDate) return false;
-    if (postEventDate === '2026-07-11' || !post.class_number) return true;
+    if (group.is_event || (group.event_date || adminDefaultEventDate) !== postEventDate) return false;
+    if (postEventDate !== adminDefaultEventDate || !post.class_number) return true;
     return parseAdminGroupInfo(group.name).classNumber === Number(post.class_number);
   });
 }
@@ -240,8 +258,8 @@ function getLocationLabel(post) {
     if (assignedGroup) {
       return `${getAdminGroupLabel(assignedGroup)} / 緯度 ${Number(post.lat).toFixed(6)}, 経度 ${Number(post.lng).toFixed(6)}`;
     }
-    if (post.event_date === '2026-07-11') {
-      return `2026年7月11日 / 緯度 ${Number(post.lat).toFixed(6)}, 経度 ${Number(post.lng).toFixed(6)}`;
+    if ((post.event_date || adminDefaultEventDate) !== adminDefaultEventDate) {
+      return `${formatAdminEventDate(post.event_date)} / 緯度 ${Number(post.lat).toFixed(6)}, 経度 ${Number(post.lng).toFixed(6)}`;
     }
     const classLabel = post.class_number ? `クラス ${post.class_number}` : '全体';
     return `${classLabel} / 緯度 ${Number(post.lat).toFixed(6)}, 経度 ${Number(post.lng).toFixed(6)}`;

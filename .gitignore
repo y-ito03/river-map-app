@@ -24,5 +24,6 @@ dist-ssr
 *.sw?
 # データベースとメディアファイルを除外
 backend/database.sqlite
+backend/database.sqlite.backup-*
 backend/media/
 backend/uploads/

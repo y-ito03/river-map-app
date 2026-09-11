@@ -22,9 +22,12 @@ window.openWizard = function(target) {
         window.wizardData.classNumber = target.classNumber || null;
         window.wizardData.groupId = target.groupId || null;
         window.wizardData.eventDate = target.eventDate || "2026-06-19";
-        document.getElementById('wizard-target-label').innerText = window.wizardData.eventDate === "2026-07-11"
-            ? "2026年7月11日に とうこう"
-            : "えらんだ場所に とうこう";
+        if (window.wizardData.eventDate === "2026-06-19") {
+            document.getElementById('wizard-target-label').innerText = "えらんだ場所に とうこう";
+        } else {
+            const [year, month, day] = window.wizardData.eventDate.split('-').map(Number);
+            document.getElementById('wizard-target-label').innerText = `${year}年${month}月${day}日に とうこう`;
+        }
     } else {
         return;
     }

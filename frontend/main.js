@@ -5,12 +5,17 @@ const TUTORIAL_STORAGE_KEY = 'riverMapTutorialSeen';
 const APP_TITLE = '岩倉川の調査記録';
 const EVENT_DATE_JUNE19 = '2026-06-19';
 const EVENT_DATE_JULY11 = '2026-07-11';
-const JULY11_GROUP_ID = EVENT_DATE_JULY11;
+const EVENT_DATE_SEPTEMBER05 = '2026-09-05';
 const JULY11_LABEL = '2026年7月11日';
+const SEPTEMBER05_LABEL = '2026年9月5日';
 const EVENT_DATE_LABELS = {
     [EVENT_DATE_JUNE19]: '2026年6月19日',
-    [EVENT_DATE_JULY11]: JULY11_LABEL
+    [EVENT_DATE_JULY11]: JULY11_LABEL,
+    [EVENT_DATE_SEPTEMBER05]: SEPTEMBER05_LABEL
 };
+const EVENT_DATES = [EVENT_DATE_JUNE19, EVENT_DATE_JULY11, EVENT_DATE_SEPTEMBER05];
+const NON_CLASS_EVENT_DATES = [EVENT_DATE_JULY11, EVENT_DATE_SEPTEMBER05];
+const EVENT_OVERVIEW_IDS = new Set(NON_CLASS_EVENT_DATES);
 
 import './style.css';
 import L from 'leaflet';
@@ -104,15 +109,38 @@ const mapIllustrations = {
         aspectRatio: 5484 / 2580
     },
     [EVENT_DATE_JULY11]: {
-        url: '/20260711_map_extended.png',
+        url: '/20260711_map_extended_landscape.jpg',
         sourceBounds: JULY11_EXTENDED_MAP_SOURCE_BOUNDS,
         viewSourceBounds: [
             [35.06830, 135.78395],
             [35.06440, 135.78580]
         ],
         aspectRatio: 2775 / 1313
+    },
+    [EVENT_DATE_SEPTEMBER05]: {
+        url: '/20260711_map_extended_landscape.jpg',
+        sourceBounds: JULY11_EXTENDED_MAP_SOURCE_BOUNDS,
+        viewSourceBounds: [
+            [35.06980, 135.78395],
+            [35.06440, 135.78590]
+        ],
+        aspectRatio: 2775 / 1313
     }
 };
+
+function getMapIllustrationDate(eventDate) {
+    if (eventDate === 'all') return EVENT_DATE_SEPTEMBER05;
+    return mapIllustrations[eventDate] ? eventDate : EVENT_DATE_JUNE19;
+}
+
+function renderEventDateOptions(selectedDate, includeAll = true) {
+    return `
+        ${includeAll ? `<option value="all" ${selectedDate === 'all' ? 'selected' : ''}>すべての日</option>` : ''}
+        ${EVENT_DATES.map(eventDate => `
+            <option value="${eventDate}" ${selectedDate === eventDate ? 'selected' : ''}>${formatEventDate(eventDate)}</option>
+        `).join('')}
+    `;
+}
 
 function sourcePointToDisplay(geometry, lat, lng) {
     const x = (lng - geometry.sourceWest) / geometry.sourceLngSpan;
@@ -276,12 +304,20 @@ const groupColors = {
     4: '#fbc02d',
     5: '#7b1fa2',
     6: '#00acc1',
-    7: '#f06292'
+    7: '#f06292',
+    8: '#5d4037',
+    9: '#455a64',
+    10: '#00897b'
 };
 const classDashPatterns = {
     1: null,
     2: '10 8',
     3: '2 8'
+};
+const eventDashPatterns = {
+    [EVENT_DATE_JUNE19]: '10 7',
+    [EVENT_DATE_JULY11]: null,
+    [EVENT_DATE_SEPTEMBER05]: '2 7'
 };
 const classNames = {
     1: 'Davis',
@@ -305,7 +341,10 @@ const teamLetterToNumber = {
     d: 4,
     e: 5,
     f: 6,
-    g: 7
+    g: 7,
+    h: 8,
+    i: 9,
+    j: 10
 };
 const speciesIconMap = [
     { keywords: ['サワガニ'], url: '/species-icons/sawagani.svg' },
@@ -450,6 +489,16 @@ function parseGroupInfo(groupName) {
         };
     }
 
+    const eventTeamMatch = name.match(/([A-J])\s*班/i);
+    if (eventTeamMatch) {
+        const teamLabel = eventTeamMatch[1].toUpperCase();
+        return {
+            classNumber: 1,
+            teamNumber: teamLetterToNumber[teamLabel.toLowerCase()] || 1,
+            teamLabel
+        };
+    }
+
     const teamMatch = name.match(/(\d+)\s*班/);
     return {
         classNumber: 1,
@@ -466,7 +515,7 @@ function getDisplayGroupName(groupName) {
 function getGroupDisplayName(groupId) {
     const group = surveyData[groupId];
     if (!group) return '';
-    if (group.event_date === EVENT_DATE_JULY11 && groupId !== JULY11_GROUP_ID) {
+    if ((group.event_date || EVENT_DATE_JUNE19) !== EVENT_DATE_JUNE19 && !isEventOverview(groupId)) {
         return `${parseGroupInfo(group.name).teamLabel}班`;
     }
     return getDisplayGroupName(group.name);
@@ -496,11 +545,13 @@ function groupMatchesClass(groupName, classFilter) {
 
 function isEventGroup(groupId) {
     const group = surveyData[groupId];
-    return groupId === JULY11_GROUP_ID || group?.event_date === EVENT_DATE_JULY11 || group?.is_event === true;
+    return EVENT_OVERVIEW_IDS.has(String(groupId))
+        || (group?.event_date && group.event_date !== EVENT_DATE_JUNE19)
+        || group?.is_event === true;
 }
 
 function isEventOverview(groupId) {
-    return groupId === JULY11_GROUP_ID || surveyData[groupId]?.is_event === true;
+    return EVENT_OVERVIEW_IDS.has(String(groupId)) || surveyData[groupId]?.is_event === true;
 }
 
 function getPostEventDate(post) {
@@ -522,7 +573,12 @@ function getCurrentPostEventDate() {
         && selectedReviewGroupId && surveyData[selectedReviewGroupId]) {
         return surveyData[selectedReviewGroupId].event_date || EVENT_DATE_JUNE19;
     }
-    return isEventGroup(currentGroupId) ? EVENT_DATE_JULY11 : EVENT_DATE_JUNE19;
+    if (currentGroupId && surveyData[currentGroupId]) {
+        return surveyData[currentGroupId].event_date || EVENT_DATE_JUNE19;
+    }
+    return EVENT_OVERVIEW_IDS.has(String(currentGroupId))
+        ? String(currentGroupId)
+        : EVENT_DATE_JUNE19;
 }
 
 function getCurrentFreePostClassNumber() {
@@ -710,7 +766,7 @@ function freePostMatchesGroupPanel(post, groupId) {
 
     const groupEventDate = group.event_date || EVENT_DATE_JUNE19;
     if (!freePostMatchesEvent(post, groupEventDate)) return false;
-    if (groupEventDate === EVENT_DATE_JULY11) return true;
+    if (groupEventDate !== EVENT_DATE_JUNE19) return true;
 
     const { classNumber } = parseGroupInfo(group.name);
     return Number(post.class_number) === Number(classNumber);
@@ -805,7 +861,7 @@ function getSortedGroupEntries(classFilter = 'all', eventDate = EVENT_DATE_JUNE1
 
 function getDefaultReviewGroupId(classFilter = 'all', eventDate = EVENT_DATE_JUNE19) {
     const entries = getSortedGroupEntries(classFilter, eventDate);
-    if (eventDate === EVENT_DATE_JULY11) return entries[0]?.[0] || null;
+    if (eventDate !== EVENT_DATE_JUNE19) return entries[0]?.[0] || null;
     const davisOne = entries.find(([, group]) => {
         const info = parseGroupInfo(group.name);
         return info.classNumber === 1 && info.teamNumber === 1;
@@ -900,10 +956,11 @@ function openGroupReviewPanel(groupId, options = {}) {
     lastPanelOptions = { ...options };
     const panel = document.getElementById('detail-panel');
     const content = document.getElementById('panel-content');
+    const eventDate = surveyData[groupId]?.event_date || EVENT_DATE_JUNE19;
     const panelTitle = isEventOverview(groupId)
-        ? `${JULY11_LABEL}の確認`
-        : surveyData[groupId]?.event_date === EVENT_DATE_JULY11
-            ? `${JULY11_LABEL} ${getGroupDisplayName(groupId)}の確認`
+        ? `${formatEventDate(eventDate)}の確認`
+        : eventDate !== EVENT_DATE_JUNE19
+            ? `${formatEventDate(eventDate)} ${getGroupDisplayName(groupId)}の確認`
             : `${getGroupDisplayName(groupId)} の確認`;
     document.getElementById('panel-title').innerText = panelTitle;
     content.innerHTML = renderGroupReviewHTML(groupId, options);
@@ -1007,7 +1064,7 @@ function renderPostedDetectionMarkers({ classFilter = 'all', targetGroupId = nul
 
 function renderGroupData(groupId) {
     if (isEventOverview(groupId)) {
-        renderJuly11Layer();
+        renderEventLayer(surveyData[groupId]?.event_date || String(groupId));
         return;
     }
 
@@ -1019,8 +1076,8 @@ function renderGroupData(groupId) {
     currentGroupId = groupId;
 
     clearMap();
-    document.querySelector('.title').innerText = eventDate === EVENT_DATE_JULY11
-        ? `${APP_TITLE} - ${JULY11_LABEL} ${getGroupDisplayName(groupId)}`
+    document.querySelector('.title').innerText = eventDate !== EVENT_DATE_JUNE19
+        ? `${APP_TITLE} - ${formatEventDate(eventDate)} ${getGroupDisplayName(groupId)}`
         : `${APP_TITLE} - ${getGroupDisplayName(groupId)}`;
 
     const trackSegments = getTrackSegments(data);
@@ -1035,7 +1092,7 @@ function renderGroupData(groupId) {
     renderFreePostMarkers({ targetGroupId: groupId, eventDate });
     renderPostedDetectionMarkers({ targetGroupId: groupId, eventDate });
     openGroupReviewPanel(groupId);
-    if (eventDate === EVENT_DATE_JULY11 && trackSegments.length > 0) {
+    if (eventDate !== EVENT_DATE_JUNE19 && trackSegments.length > 0) {
         fitMapToTracks(trackSegments);
     } else {
         fitMapToIllustration();
@@ -1110,7 +1167,7 @@ function renderAllTracks(classFilter = allTracksClassFilter) {
 function renderAllRecords(eventDate = allRecordsEventFilter) {
     setFreePostMode(false);
     allRecordsEventFilter = eventDate;
-    setMapIllustration(eventDate === EVENT_DATE_JUNE19 ? EVENT_DATE_JUNE19 : EVENT_DATE_JULY11);
+    setMapIllustration(getMapIllustrationDate(eventDate));
     currentGroupId = 'all-records';
     clearMap();
     document.querySelector('.title').innerText = eventDate === 'all'
@@ -1125,7 +1182,7 @@ function renderAllRecords(eventDate = allRecordsEventFilter) {
         const groupEventDate = group.event_date || EVENT_DATE_JUNE19;
         const style = { ...getGroupStyle(group.name) };
         if (eventDate === 'all') {
-            style.dashArray = groupEventDate === EVENT_DATE_JUNE19 ? '10 7' : null;
+            style.dashArray = eventDashPatterns[groupEventDate] ?? null;
         }
 
         getTrackSegments(group).forEach(segment => {
@@ -1154,13 +1211,15 @@ function renderAllRecords(eventDate = allRecordsEventFilter) {
     legendPanel.innerHTML = `
         <h3>表示する記録</h3>
         <select id="all-records-date-filter" class="track-filter" aria-label="表示する日">
-            <option value="all" ${eventDate === 'all' ? 'selected' : ''}>すべての日</option>
-            <option value="${EVENT_DATE_JUNE19}" ${eventDate === EVENT_DATE_JUNE19 ? 'selected' : ''}>${formatEventDate(EVENT_DATE_JUNE19)}</option>
-            <option value="${EVENT_DATE_JULY11}" ${eventDate === EVENT_DATE_JULY11 ? 'selected' : ''}>${formatEventDate(EVENT_DATE_JULY11)}</option>
+            ${renderEventDateOptions(eventDate)}
         </select>
         ${eventDate === 'all' ? `
-            <div class="legend-item"><span class="legend-line dashed"></span><span>${formatEventDate(EVENT_DATE_JUNE19)}</span></div>
-            <div class="legend-item"><span class="legend-line"></span><span>${formatEventDate(EVENT_DATE_JULY11)}</span></div>
+            ${EVENT_DATES.map(date => `
+                <div class="legend-item">
+                    <span class="legend-line ${eventDashPatterns[date] ? 'dashed' : ''}"></span>
+                    <span>${formatEventDate(date)}</span>
+                </div>
+            `).join('')}
         ` : ''}
         <div class="track-legend-scroll">
             ${legendItems.length > 0 ? legendItems.join('') : '<p class="legend-empty">表示できる道がありません。</p>'}
@@ -1263,7 +1322,7 @@ function updateCreatureChartSelection(targetCreature) {
 function renderHeatmap(eventDate = heatmapDateFilter) {
     setFreePostMode(false);
     heatmapDateFilter = eventDate;
-    setMapIllustration(eventDate === EVENT_DATE_JUNE19 ? EVENT_DATE_JUNE19 : EVENT_DATE_JULY11);
+    setMapIllustration(getMapIllustrationDate(eventDate));
     clearMap();
     const speciesLegendDetails = document.querySelector('.species-legend-details');
     if (speciesLegendDetails) speciesLegendDetails.open = false;
@@ -1295,17 +1354,18 @@ function renderHeatmap(eventDate = heatmapDateFilter) {
     updateSidebarMenu();
 }
 
-function renderJuly11Layer() {
+function renderEventLayer(eventDate) {
+    if (!NON_CLASS_EVENT_DATES.includes(eventDate)) return;
     setFreePostMode(false);
     clearMap();
-    setMapIllustration(EVENT_DATE_JULY11);
-    currentGroupId = JULY11_GROUP_ID;
-    document.querySelector('.title').innerText = `${APP_TITLE} - ${JULY11_LABEL}`;
+    setMapIllustration(getMapIllustrationDate(eventDate));
+    currentGroupId = eventDate;
+    document.querySelector('.title').innerText = `${APP_TITLE} - ${formatEventDate(eventDate)}`;
 
-    const julyGroups = getSortedGroupEntries('all', EVENT_DATE_JULY11);
+    const eventGroups = getSortedGroupEntries('all', eventDate);
     const legendItems = [];
     const renderedSegments = [];
-    julyGroups.forEach(([groupId, group]) => {
+    eventGroups.forEach(([groupId, group]) => {
         const trackSegments = getTrackSegments(group);
         if (trackSegments.length === 0) return;
         const style = getGroupStyle(group.name);
@@ -1314,7 +1374,7 @@ function renderJuly11Layer() {
             line.on('click', () => {
                 openGroupReviewPanel(groupId, {
                     showSelector: true,
-                    eventDate: EVENT_DATE_JULY11,
+                    eventDate,
                     viewMode: 'all-records'
                 });
             });
@@ -1329,26 +1389,26 @@ function renderJuly11Layer() {
         `);
     });
 
-    renderFreePostMarkers({ eventDate: EVENT_DATE_JULY11 });
-    renderPostedDetectionMarkers({ eventDate: EVENT_DATE_JULY11 });
+    renderFreePostMarkers({ eventDate });
+    renderPostedDetectionMarkers({ eventDate });
     if (legendItems.length > 0) {
         legendPanel.innerHTML = `<h3>色と線の見方</h3>${legendItems.join('')}`;
         legendPanel.classList.remove('hidden');
     }
 
     const reviewGroupId = selectedReviewGroupId
-        && surveyData[selectedReviewGroupId]?.event_date === EVENT_DATE_JULY11
+        && surveyData[selectedReviewGroupId]?.event_date === eventDate
         && !isEventOverview(selectedReviewGroupId)
         ? selectedReviewGroupId
-        : getDefaultReviewGroupId('all', EVENT_DATE_JULY11);
+        : getDefaultReviewGroupId('all', eventDate);
     if (reviewGroupId) {
         openGroupReviewPanel(reviewGroupId, {
             showSelector: true,
-            eventDate: EVENT_DATE_JULY11,
+            eventDate,
             viewMode: 'all-records'
         });
     } else {
-        openGroupReviewPanel(JULY11_GROUP_ID);
+        openGroupReviewPanel(eventDate);
     }
     renderedSegments.length > 0 ? fitMapToTracks(renderedSegments) : fitMapToIllustration();
     updateSidebarMenu();
@@ -1490,6 +1550,47 @@ window.addEventListener('resize', () => {
     }
 });
 
+function appendEventMenu(sidebarList, eventDate) {
+    const listItem = document.createElement('li');
+    const details = document.createElement('details');
+    details.id = `menu-date-${eventDate}`;
+    details.className = 'menu-details date-menu-details';
+    details.open = currentGroupId === eventDate
+        || surveyData[currentGroupId]?.event_date === eventDate;
+
+    const summary = document.createElement('summary');
+    summary.innerText = formatEventDate(eventDate);
+    details.appendChild(summary);
+
+    const allButton = document.createElement('button');
+    allButton.id = `btn-event-${eventDate}`;
+    allButton.className = 'nav-btn group-btn';
+    allButton.innerText = 'すべての班の記録を見る';
+    allButton.classList.toggle('active', currentGroupId === eventDate);
+    allButton.addEventListener('click', () => {
+        selectedReviewGroupId = null;
+        renderEventLayer(eventDate);
+        document.getElementById('sidebar').classList.add('hidden');
+    });
+    details.appendChild(allButton);
+
+    getSortedGroupEntries('all', eventDate).forEach(([groupId]) => {
+        const button = document.createElement('button');
+        button.className = 'nav-btn group-btn';
+        button.dataset.group = groupId;
+        button.innerText = `${getGroupDisplayName(groupId)} の記録`;
+        button.classList.toggle('active', currentGroupId === groupId);
+        button.addEventListener('click', () => {
+            renderGroupData(groupId);
+            document.getElementById('sidebar').classList.add('hidden');
+        });
+        details.appendChild(button);
+    });
+
+    listItem.appendChild(details);
+    sidebarList.appendChild(listItem);
+}
+
 function updateSidebarMenu() {
     const sidebarList = document.querySelector('#sidebar ul');
     sidebarList.innerHTML = '';
@@ -1576,43 +1677,7 @@ function updateSidebarMenu() {
     liJune19.appendChild(june19Details);
     sidebarList.appendChild(liJune19);
 
-    const liJuly11 = document.createElement('li');
-    const july11Details = document.createElement('details');
-    july11Details.id = 'menu-date-2026-07-11';
-    july11Details.className = 'menu-details date-menu-details';
-    july11Details.open = currentGroupId === JULY11_GROUP_ID
-        || surveyData[currentGroupId]?.event_date === EVENT_DATE_JULY11;
-
-    const july11Summary = document.createElement('summary');
-    july11Summary.innerText = JULY11_LABEL;
-    july11Details.appendChild(july11Summary);
-
-    const btnJuly11 = document.createElement('button');
-    btnJuly11.id = 'btn-july-2026';
-    btnJuly11.className = 'nav-btn group-btn';
-    btnJuly11.innerText = 'すべての班の記録を見る';
-    btnJuly11.classList.toggle('active', currentGroupId === JULY11_GROUP_ID);
-    btnJuly11.addEventListener('click', () => {
-        renderJuly11Layer();
-        document.getElementById('sidebar').classList.add('hidden');
-    });
-    july11Details.appendChild(btnJuly11);
-
-    getSortedGroupEntries('all', EVENT_DATE_JULY11).forEach(([groupId]) => {
-        const btn = document.createElement('button');
-        btn.className = 'nav-btn group-btn';
-        btn.dataset.group = groupId;
-        btn.innerText = `${getGroupDisplayName(groupId)} の記録`;
-        btn.classList.toggle('active', currentGroupId === groupId);
-        btn.addEventListener('click', () => {
-            renderGroupData(groupId);
-            document.getElementById('sidebar').classList.add('hidden');
-        });
-        july11Details.appendChild(btn);
-    });
-
-    liJuly11.appendChild(july11Details);
-    sidebarList.appendChild(liJuly11);
+    NON_CLASS_EVENT_DATES.forEach(eventDate => appendEventMenu(sidebarList, eventDate));
 
     const liAllTracks = document.createElement('li');
     const btnAllTracks = document.createElement('button');
@@ -1690,8 +1755,8 @@ function updateSidebarMenu() {
 }
 
 function rerenderCurrentView() {
-    if (currentGroupId === '2026-07-11') {
-        renderJuly11Layer();
+    if (isEventOverview(currentGroupId)) {
+        renderEventLayer(surveyData[currentGroupId]?.event_date || String(currentGroupId));
     } else if (currentGroupId === "heatmap") {
         renderHeatmap();
     } else if (currentGroupId === "all-tracks") {
@@ -1788,7 +1853,7 @@ document.addEventListener('change', async (event) => {
         const selectorEventDate = currentGroupId === 'all-records'
             ? 'all'
             : isEventOverview(currentGroupId)
-                ? EVENT_DATE_JULY11
+                ? (surveyData[currentGroupId]?.event_date || selectedEventDate)
                 : selectedEventDate;
         openGroupReviewPanel(reviewGroupSelect.value, {
             showSelector: true,

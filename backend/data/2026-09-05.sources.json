@@ -1,0 +1,63 @@
+{
+  "event_date": "2026-09-05",
+  "output_file": "data/2026-09-05.json",
+  "groups": [
+    {
+      "id": "2026-09-05-team-A",
+      "name": "2026年9月5日 A班",
+      "sources": [
+        { "id": "7323271d-113a-47eb-8206-df39bf2c4c95", "expected_video": "A_1.MP4" }
+      ]
+    },
+    {
+      "id": "2026-09-05-team-B",
+      "name": "2026年9月5日 B班",
+      "sources": [
+        { "id": "a92035ce-f7b5-4534-9454-c2a5c34564eb", "expected_video": "B_1.MP4" },
+        { "id": "e60d52f3-b5cd-4021-9392-d717f2597bbf", "expected_video": "B_2.MP4" }
+      ]
+    },
+    {
+      "id": "2026-09-05-team-C",
+      "name": "2026年9月5日 C班",
+      "sources": [
+        { "id": "6d50cca5-3413-4e4d-8421-bb046bdcd5fc", "expected_video": "C_1.MP4" }
+      ]
+    },
+    {
+      "id": "2026-09-05-team-D",
+      "name": "2026年9月5日 D班",
+      "sources": [
+        { "id": "b1173b17-c4cd-454a-bd42-5065c2626e5b", "expected_video": "D_1.MP4" }
+      ]
+    },
+    {
+      "id": "2026-09-05-team-E",
+      "name": "2026年9月5日 E班",
+      "sources": [
+        { "id": "4c443b79-a84a-4d08-9c77-c2ffd662b32e", "expected_video": "E_1.MP4" }
+      ]
+    },
+    {
+      "id": "2026-09-05-team-H",
+      "name": "2026年9月5日 H班",
+      "sources": [
+        { "id": "247f6cfc-b5a5-4c50-9ec9-fb2e637ec1ee", "expected_video": "H_1.MP4" }
+      ]
+    },
+    {
+      "id": "2026-09-05-team-I",
+      "name": "2026年9月5日 I班",
+      "sources": [
+        { "id": "bd5d8a60-b04d-48f8-be87-9949ef1f47bd", "expected_video": "I_1.MP4" }
+      ]
+    },
+    {
+      "id": "2026-09-05-team-J",
+      "name": "2026年9月5日 J班",
+      "sources": [
+        { "id": "8f21d6fa-3038-4194-bee9-19c328989d2d", "expected_video": "J_1.MP4" }
+      ]
+    }
+  ]
+}

@@ -33,18 +33,31 @@ const databaseFile = path.join(__dirname, 'database.sqlite');
 const SELECTED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
 const EVENT_DATE_JUNE19 = '2026-06-19';
 const EVENT_DATE_JULY11 = '2026-07-11';
-const JULY11_GROUP = {
-    id: EVENT_DATE_JULY11,
-    name: '2026年7月11日',
-    gps_track: '[]',
-    event_date: EVENT_DATE_JULY11,
-    is_event: 1
-};
+const EVENT_DATE_SEPTEMBER05 = '2026-09-05';
+const EVENT_DATES = [EVENT_DATE_JUNE19, EVENT_DATE_JULY11, EVENT_DATE_SEPTEMBER05];
+const EVENT_DATE_SET = new Set(EVENT_DATES);
+const VIRTUAL_EVENT_GROUPS = [
+    {
+        id: EVENT_DATE_JULY11,
+        name: '2026年7月11日',
+        gps_track: '[]',
+        event_date: EVENT_DATE_JULY11,
+        is_event: 1
+    },
+    {
+        id: EVENT_DATE_SEPTEMBER05,
+        name: '2026年9月5日',
+        gps_track: '[]',
+        event_date: EVENT_DATE_SEPTEMBER05,
+        is_event: 1
+    }
+];
 const METERS_PER_DEGREE_LAT = 111320;
 const RIVER_CORRIDOR_RADIUS_M = Number(process.env.RIVER_CORRIDOR_RADIUS_M || 25);
 const JULY11_RIVER_CORRIDOR_RADIUS_M = Number(process.env.JULY11_RIVER_CORRIDOR_RADIUS_M || 8);
-const JULY11_ROUTE_BIN_LAT_DEGREES = 0.00005;
-const JULY11_ROUTE_MIN_BIN_POINTS = 20;
+const SEPTEMBER05_RIVER_CORRIDOR_RADIUS_M = Number(process.env.SEPTEMBER05_RIVER_CORRIDOR_RADIUS_M || 10);
+const CONSENSUS_ROUTE_BIN_LAT_DEGREES = 0.00005;
+const CONSENSUS_ROUTE_MIN_BIN_POINTS = 20;
 const TRACK_SEGMENT_MAX_JUMP_M = 20;
 const MAP_CONFIGS = {
     [EVENT_DATE_JUNE19]: {
@@ -74,25 +87,42 @@ const MAP_CONFIGS = {
         corridorRadiusM: JULY11_RIVER_CORRIDOR_RADIUS_M,
         riverCenterline: [],
         useConsensusCenterline: true
+    },
+    [EVENT_DATE_SEPTEMBER05]: {
+        bounds: {
+            north: 35.07020,
+            south: 35.06440,
+            west: 135.78400,
+            east: 135.78580
+        },
+        corridorRadiusM: SEPTEMBER05_RIVER_CORRIDOR_RADIUS_M,
+        riverCenterline: [],
+        useConsensusCenterline: true,
+        routeBinLatDegrees: 0.00005,
+        routeMinBinPoints: 5
     }
 };
 const CLASS_LETTER_TO_NUMBER = { d: 1, h: 2, l: 3 };
 const CLASS_NAME_TO_NUMBER = { davis: 1, hardy: 2, learned: 3 };
-const TEAM_LETTER_TO_NUMBER = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7 };
+const TEAM_LETTER_TO_NUMBER = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7, h: 8, i: 9, j: 10 };
 
 app.use(express.json());
 
 function getEventDate(value) {
     const text = String(value || '').trim();
-    return text === EVENT_DATE_JULY11 ? EVENT_DATE_JULY11 : EVENT_DATE_JUNE19;
+    return EVENT_DATE_SET.has(text) ? text : EVENT_DATE_JUNE19;
 }
 
 function isVirtualGroupId(groupId) {
-    return String(groupId) === JULY11_GROUP.id;
+    return VIRTUAL_EVENT_GROUPS.some(group => group.id === String(groupId));
 }
 
 function getVirtualGroups() {
-    return [{ ...JULY11_GROUP }];
+    return VIRTUAL_EVENT_GROUPS.map(group => ({ ...group }));
+}
+
+function getVirtualGroup(groupId) {
+    return VIRTUAL_EVENT_GROUPS.find(group => group.id === String(groupId)) || null;
 }
 
 async function getGroupsWithVirtualEvents() {
@@ -104,7 +134,8 @@ async function getGroupsWithVirtualEvents() {
 }
 
 async function getGroupWithVirtualEvent(groupId) {
-    if (isVirtualGroupId(groupId)) return { ...JULY11_GROUP };
+    const virtualGroup = getVirtualGroup(groupId);
+    if (virtualGroup) return { ...virtualGroup };
     return db.get(
         "SELECT id, name, gps_track, COALESCE(event_date, ?) AS event_date, 0 AS is_event FROM groups WHERE id = ?",
         EVENT_DATE_JUNE19,
@@ -198,6 +229,14 @@ function parseGroupInfo(groupName) {
             teamNumber: /^[A-G]$/i.test(rawTeam)
                 ? TEAM_LETTER_TO_NUMBER[rawTeam.toLowerCase()] || 1
                 : Number(rawTeam) || 1
+        };
+    }
+
+    const eventTeamMatch = name.match(/([A-J])\s*班/i);
+    if (eventTeamMatch) {
+        return {
+            classNumber: 1,
+            teamNumber: TEAM_LETTER_TO_NUMBER[eventTeamMatch[1].toLowerCase()] || 1
         };
     }
 
@@ -306,22 +345,24 @@ function median(values) {
 function buildConsensusCenterline(groups, eventDate) {
     const config = getMapConfig(eventDate);
     if (!config.useConsensusCenterline) return config.riverCenterline;
+    const routeBinLatDegrees = config.routeBinLatDegrees || CONSENSUS_ROUTE_BIN_LAT_DEGREES;
+    const routeMinBinPoints = config.routeMinBinPoints || CONSENSUS_ROUTE_MIN_BIN_POINTS;
 
     const bins = new Map();
     groups.filter(group => getEventDate(group.event_date) === getEventDate(eventDate)).forEach(group => {
         getValidTrackPoints(group.gps_track).forEach(([lat, lng]) => {
             if (!isMapPoint(lat, lng, eventDate)) return;
-            const binIndex = Math.floor((lat - config.bounds.south) / JULY11_ROUTE_BIN_LAT_DEGREES);
+            const binIndex = Math.floor((lat - config.bounds.south) / routeBinLatDegrees);
             if (!bins.has(binIndex)) bins.set(binIndex, []);
             bins.get(binIndex).push(lng);
         });
     });
 
     const centerline = [...bins.entries()]
-        .filter(([, lngValues]) => lngValues.length >= JULY11_ROUTE_MIN_BIN_POINTS)
+        .filter(([, lngValues]) => lngValues.length >= routeMinBinPoints)
         .sort(([indexA], [indexB]) => indexA - indexB)
         .map(([binIndex, lngValues]) => [
-            config.bounds.south + (binIndex + 0.5) * JULY11_ROUTE_BIN_LAT_DEGREES,
+            config.bounds.south + (binIndex + 0.5) * routeBinLatDegrees,
             median(lngValues)
         ]);
 
@@ -360,7 +401,7 @@ function smoothTrackSegment(points, radius = 2) {
 
 function getFallbackTrack(groupName) {
     const { classNumber, teamNumber } = parseGroupInfo(groupName);
-    const teamIndex = Math.max(1, Math.min(7, teamNumber));
+    const teamIndex = Math.max(1, Math.min(10, teamNumber));
     const startLat = 35.06608 - (teamIndex - 1) * 0.0002;
     const endLat = Math.max(35.06472, startLat - 0.00068);
     const classLngOffset = { 1: -0.000035, 2: 0, 3: 0.000035 }[classNumber] || 0;
@@ -490,9 +531,11 @@ app.get('/api/surveys', requireAccess, async (req, res) => {
     const groupsData = {};
     try {
         const groups = await getGroupsWithVirtualEvents();
-        const eventCenterlines = {
-            [EVENT_DATE_JULY11]: buildConsensusCenterline(groups, EVENT_DATE_JULY11)
-        };
+        const eventCenterlines = Object.fromEntries(
+            EVENT_DATES
+                .filter(eventDate => getMapConfig(eventDate).useConsensusCenterline)
+                .map(eventDate => [eventDate, buildConsensusCenterline(groups, eventDate)])
+        );
         for (const group of groups) {
             const eventDate = group.event_date || EVENT_DATE_JUNE19;
             const centerline = eventCenterlines[eventDate] || null;
@@ -692,6 +735,7 @@ async function getAdminPosts() {
             'detection' AS type,
             p.id,
             p.detection_id,
+            d.group_id,
             p.nickname,
             p.creature,
             p.comment,
@@ -702,15 +746,16 @@ async function getAdminPosts() {
             d.lat,
             d.lng,
             d.thumbnail_path,
-            CASE
-                WHEN d.group_id = ? THEN ?
-                ELSE g.name
-            END AS group_name
+            g.name AS group_name
         FROM user_posts p
         LEFT JOIN detections d ON d.id = p.detection_id
         LEFT JOIN groups g ON g.id = d.group_id
         ORDER BY p.id DESC
-    `, JULY11_GROUP.id, JULY11_GROUP.name);
+    `);
+
+    detectionPosts.forEach(post => {
+        post.group_name = post.group_name || getVirtualGroup(post.group_id)?.name || null;
+    });
 
     const freePosts = await db.all(`
         SELECT
@@ -830,14 +875,15 @@ app.get('/api/admin/detections', requireAdmin, async (req, res) => {
                 d.timestamp_sec,
                 d.thumbnail_path,
                 COALESCE(d.hidden, 0) AS hidden,
-                CASE
-                    WHEN d.group_id = ? THEN ?
-                    ELSE g.name
-                END AS group_name
+                g.name AS group_name
             FROM detections d
             LEFT JOIN groups g ON g.id = d.group_id
             ORDER BY group_name ASC, d.timestamp_sec ASC, d.id ASC
-        `, JULY11_GROUP.id, JULY11_GROUP.name);
+        `);
+
+        detections.forEach(detection => {
+            detection.group_name = detection.group_name || getVirtualGroup(detection.group_id)?.name || null;
+        });
 
         res.json({ groups, detections, label_options: DETECTION_LABEL_OPTIONS });
     } catch (err) {
