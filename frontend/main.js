@@ -16,6 +16,7 @@ const EVENT_DATE_LABELS = {
 const EVENT_DATES = [EVENT_DATE_JUNE19, EVENT_DATE_JULY11, EVENT_DATE_SEPTEMBER05];
 const NON_CLASS_EVENT_DATES = [EVENT_DATE_JULY11, EVENT_DATE_SEPTEMBER05];
 const EVENT_OVERVIEW_IDS = new Set(NON_CLASS_EVENT_DATES);
+const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
 
 import './style.css';
 import L from 'leaflet';
@@ -87,8 +88,8 @@ const BASE_MAP_SOURCE_BOUNDS = [
     [35.0668688174732, 135.78416397658356 + MAP_IMAGE_LNG_OFFSET],
     [35.06464445892178, 135.78518787088882 + MAP_IMAGE_LNG_OFFSET]
 ];
-// The extended image keeps the former 1825 x 862 map pixel-for-pixel at its top-left.
-// Expanding the source bounds by the same pixel ratios preserves every existing overlay position.
+// The aligned image keeps the existing canvas size and coordinate correspondence.
+// Expanding the source bounds by the original pixel ratios preserves existing overlay positions.
 const JULY11_EXTENDED_MAP_SOURCE_BOUNDS = [
     [
         BASE_MAP_SOURCE_BOUNDS[1][0]
@@ -109,22 +110,24 @@ const mapIllustrations = {
         aspectRatio: 5484 / 2580
     },
     [EVENT_DATE_JULY11]: {
-        url: '/20260711_map_extended_landscape.jpg',
+        url: '/iwakura_map_osm_aligned_20260912.jpg',
         sourceBounds: JULY11_EXTENDED_MAP_SOURCE_BOUNDS,
         viewSourceBounds: [
             [35.06830, 135.78395],
             [35.06440, 135.78580]
         ],
-        aspectRatio: 2775 / 1313
+        aspectRatio: 2775 / 1313,
+        attribution: OSM_ATTRIBUTION
     },
     [EVENT_DATE_SEPTEMBER05]: {
-        url: '/20260711_map_extended_landscape.jpg',
+        url: '/iwakura_map_osm_aligned_20260912.jpg',
         sourceBounds: JULY11_EXTENDED_MAP_SOURCE_BOUNDS,
         viewSourceBounds: [
             [35.06980, 135.78395],
             [35.06440, 135.78590]
         ],
-        aspectRatio: 2775 / 1313
+        aspectRatio: 2775 / 1313,
+        attribution: OSM_ATTRIBUTION
     }
 };
 
@@ -239,6 +242,7 @@ const map = L.map('map', {
 });
 
 let mapImageOverlay = null;
+let currentMapAttribution = null;
 
 function fitMapToIllustration() {
     const coverZoom = map.getBoundsZoom(currentMapGeometry.imageBounds, true);
@@ -260,14 +264,22 @@ function setMapIllustration(dateKey) {
     if (mapImageOverlay) {
         map.removeLayer(mapImageOverlay);
     }
+    if (currentMapAttribution) {
+        map.attributionControl.removeAttribution(currentMapAttribution);
+    }
 
     currentMapIllustration = nextDateKey;
-    currentMapGeometry = mapIllustrations[nextDateKey].geometry;
+    const illustration = mapIllustrations[nextDateKey];
+    currentMapGeometry = illustration.geometry;
+    currentMapAttribution = illustration.attribution || null;
     map.setMaxBounds(currentMapGeometry.navigationBounds);
-    mapImageOverlay = L.imageOverlay(mapIllustrations[nextDateKey].url, currentMapGeometry.imageBounds, {
+    mapImageOverlay = L.imageOverlay(illustration.url, currentMapGeometry.imageBounds, {
         interactive: true,
         opacity: 1.0
     }).addTo(map);
+    if (currentMapAttribution) {
+        map.attributionControl.addAttribution(currentMapAttribution);
+    }
     mapImageOverlay.bringToBack();
 }
 
