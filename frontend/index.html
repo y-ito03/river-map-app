@@ -103,7 +103,10 @@
 
     <!-- ヒートマップモード用の集計パネル -->
     <div id="summary-panel" class="summary-panel hidden">
-      <h3>見つかったいきもの</h3>
+      <div class="summary-panel-header">
+        <h3>見つかったいきもの</h3>
+        <button id="close-summary-panel" class="close-summary-btn" type="button" aria-label="見つかったいきものを閉じる">✕</button>
+      </div>
       <label class="summary-filter-label" for="heatmap-date-filter">表示する日</label>
       <select id="heatmap-date-filter" class="heatmap-filter">
         <option value="all">すべての日</option>

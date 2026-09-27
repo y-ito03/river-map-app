@@ -110,7 +110,11 @@ body, html {
   width: min(320px, calc(100vw - 40px)); max-height: calc(100dvh - 90px); overflow-y: auto; box-sizing: border-box;
 }
 .summary-panel.hidden { display: none; }
-.summary-panel h3 { margin: 0 0 10px 0; font-size: 1.1em; border-bottom: 2px solid #FF9800; padding-bottom: 5px; }
+.summary-panel-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; border-bottom: 2px solid #FF9800; }
+.summary-panel-header h3 { flex: 1; min-width: 0; margin: 0; font-size: 1.1em; }
+.close-summary-btn { flex: 0 0 44px; width: 44px; height: 44px; padding: 0; border: none; border-radius: 6px; background: transparent; color: #666; font-size: 1.25rem; cursor: pointer; }
+.close-summary-btn:hover { background: #eee; }
+.close-summary-btn:focus-visible { outline: 2px solid #2e7d32; outline-offset: 2px; }
 
 /* 【追加】ヒートマップの絞り込みドロップダウン */
 .heatmap-filter {

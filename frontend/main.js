@@ -1426,6 +1426,10 @@ function renderEventLayer(eventDate) {
     updateSidebarMenu();
 }
 
+document.getElementById('close-summary-panel').addEventListener('click', () => {
+    document.getElementById('summary-panel').classList.add('hidden');
+});
+
 document.getElementById('heatmap-filter').addEventListener('change', (event) => {
     drawHeatLayer(event.target.value, heatmapDateFilter);
     updateCreatureChartSelection(event.target.value);
