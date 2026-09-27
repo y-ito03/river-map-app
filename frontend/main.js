@@ -1029,6 +1029,8 @@ function clearMap() {
     currentMarkers = [];
     document.getElementById('summary-panel').classList.add('hidden');
     document.getElementById('detail-panel').classList.add('hidden');
+    document.getElementById('reopen-summary-panel').classList.add('hidden');
+    document.getElementById('reopen-summary-panel').setAttribute('aria-expanded', 'false');
     panelReopenTab.classList.add('hidden');
     legendPanel.classList.add('hidden');
 }
@@ -1357,6 +1359,7 @@ function renderHeatmap(eventDate = heatmapDateFilter) {
 
     renderCreatureChart(creatureCounts);
     document.getElementById('summary-panel').classList.remove('hidden');
+    document.getElementById('reopen-summary-panel').setAttribute('aria-expanded', 'true');
     drawHeatLayer('all', eventDate);
     if (observations.length > 0) {
         fitMapToTracks([observations.map(item => [item.lat, item.lng])]);
@@ -1428,6 +1431,17 @@ function renderEventLayer(eventDate) {
 
 document.getElementById('close-summary-panel').addEventListener('click', () => {
     document.getElementById('summary-panel').classList.add('hidden');
+    const reopenButton = document.getElementById('reopen-summary-panel');
+    reopenButton.classList.remove('hidden');
+    reopenButton.setAttribute('aria-expanded', 'false');
+    reopenButton.focus();
+});
+
+document.getElementById('reopen-summary-panel').addEventListener('click', (event) => {
+    document.getElementById('summary-panel').classList.remove('hidden');
+    event.currentTarget.classList.add('hidden');
+    event.currentTarget.setAttribute('aria-expanded', 'true');
+    document.getElementById('close-summary-panel').focus();
 });
 
 document.getElementById('heatmap-filter').addEventListener('change', (event) => {
